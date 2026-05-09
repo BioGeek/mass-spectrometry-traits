@@ -75,4 +75,38 @@ pub trait SpectraIndex {
     where
         S: Spectrum,
         Emit: FnMut(FlashSearchResult);
+
+    /// Return the best `k` modified-similarity results for an external query.
+    fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum;
+
+    /// Return the best `k` modified-similarity results using caller-provided
+    /// scratch state.
+    fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum;
+
+    /// Stream the best `k` modified-similarity results using caller-provided
+    /// scratch state.
+    fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult);
 }

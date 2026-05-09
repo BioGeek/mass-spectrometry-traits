@@ -60,6 +60,31 @@ where
     assert_eq!(streamed, top);
 }
 
+fn assert_modified_top_k_trait_surface<I>(index: &I, query: &GenericSpectrum)
+where
+    I: SpectraIndex,
+{
+    let modified_top = index
+        .search_modified_top_k(query, 2)
+        .expect("trait modified top-k should succeed");
+    assert!(!modified_top.is_empty());
+
+    let mut state = index.new_search_state();
+    let stateful = index
+        .search_modified_top_k_with_state(query, 2, &mut state)
+        .expect("trait stateful modified top-k should succeed");
+    assert_eq!(stateful, modified_top);
+
+    let mut top_k_state = TopKSearchState::new();
+    let mut streamed = Vec::new();
+    index
+        .for_each_modified_top_k_with_state(query, 2, &mut state, &mut top_k_state, |hit| {
+            streamed.push(hit);
+        })
+        .expect("trait streaming modified top-k should succeed");
+    assert_eq!(streamed, modified_top);
+}
+
 fn assert_trait_pepmass_defaults<I>(index: I)
 where
     I: SpectraIndex,
@@ -79,6 +104,7 @@ fn spectra_index_trait_covers_all_flash_index_variants() {
         .build(&spectra)
         .unwrap();
     assert_trait_surface(&cosine, query);
+    assert_modified_top_k_trait_surface(&cosine, query);
 
     let threshold_cosine = FlashCosineThresholdIndex::<f64>::builder()
         .mz_power(0.0)
@@ -88,12 +114,14 @@ fn spectra_index_trait_covers_all_flash_index_variants() {
         .build(&spectra)
         .unwrap();
     assert_trait_surface(&threshold_cosine, query);
+    assert_modified_top_k_trait_surface(&threshold_cosine, query);
 
     let entropy = FlashEntropyIndex::<f64>::builder()
         .mz_tolerance(0.1)
         .build(&spectra)
         .unwrap();
     assert_trait_surface(&entropy, query);
+    assert_modified_top_k_trait_surface(&entropy, query);
 }
 
 #[test]

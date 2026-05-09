@@ -21,17 +21,17 @@ use super::cosine_common::{
     ensure_finite, normalized_peak_products, validate_non_negative_tolerance,
     validate_well_separated,
 };
-#[cfg(feature = "rayon")]
-use super::flash_common::FlashRowSearchProgress;
 use super::flash_common::{
     DEFAULT_COSINE_SPECTRUM_BLOCK_SIZE, DirectThresholdSearch, FlashIndex, FlashIndexBuildOptions,
-    FlashIndexBuildPhase, FlashIndexBuildProgress, FlashKernel, FlashSearchDiagnostics,
-    FlashSearchResult, PepmassFilter, PreparedFlashSpectra, PreparedFlashSpectrum, SearchState,
-    SpectrumBlockPrecursorRangeIndex, SpectrumBlockProductIndex, SpectrumBlockUpperBoundIndex,
-    SpectrumIdMap, TopKSearchResults, TopKSearchState, convert_flash_value, convert_flash_values,
-    flash_values_to_f64, progress_len_from_size_hint, reorder_prepared_spectra_by_signature,
+    FlashIndexBuildPhase, FlashIndexBuildProgress, FlashKernel, FlashSearchResult, PepmassFilter,
+    PreparedFlashSpectra, PreparedFlashSpectrum, SearchState, SpectrumBlockPrecursorRangeIndex,
+    SpectrumBlockProductIndex, SpectrumBlockUpperBoundIndex, SpectrumIdMap, TopKSearchResults,
+    TopKSearchState, convert_flash_value, convert_flash_values, flash_values_to_f64,
+    progress_len_from_size_hint, reorder_prepared_spectra_by_signature,
     reorder_prepared_spectra_for_block_pruning,
 };
+#[cfg(feature = "rayon")]
+use super::flash_common::{FlashRowSearchProgress, FlashSearchDiagnostics};
 use super::similarity_errors::{SimilarityComputationError, SimilarityConfigError};
 use crate::traits::{SpectraIndex, SpectraIndexBuilder, Spectrum, SpectrumFloat};
 
@@ -1070,6 +1070,73 @@ impl<P: SpectrumFloat + Sync> FlashCosineIndex<P> {
         ))
     }
 
+    /// Modified search that returns the best `k` results by descending score.
+    ///
+    /// This uses the same direct + neutral-loss matching path as
+    /// [`Self::search_modified`], then retains only the deterministic top-k
+    /// ranking: descending score, descending match count, ascending spectrum id.
+    pub fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut state = self.new_search_state();
+        self.search_modified_top_k_with_state(query, k, &mut state)
+    }
+
+    /// Modified top-k search using caller-provided scratch state.
+    pub fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut top_k_state = TopKSearchState::new();
+        let mut results = Vec::new();
+        self.for_each_modified_top_k_with_state(query, k, state, &mut top_k_state, |result| {
+            results.push(result)
+        })?;
+        Ok(results)
+    }
+
+    /// Stream modified top-k results using caller-provided scratch state.
+    pub fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        let (query_mz, query_data) = self.prepare_query(query)?;
+        let query_meta = CosineKernel::spectrum_meta(&query_data);
+        let precursor_f64 = ensure_finite(query.precursor_mz().to_f64(), "query_precursor_mz")?;
+        self.inner.for_each_modified_top_k_with_state(
+            DirectThresholdSearch {
+                query_mz: &query_mz,
+                query_data: &query_data,
+                query_meta: &query_meta,
+                score_threshold: 0.0,
+                query_precursor_mz: Some(precursor_f64),
+            },
+            k,
+            state,
+            top_k_state,
+            emit,
+        );
+        Ok(())
+    }
+
     /// Prepare query peaks: compute products, collect m/z, validate.
     fn prepare_query<S>(
         &self,
@@ -1464,6 +1531,75 @@ impl<P: SpectrumFloat + Sync> FlashCosineThresholdIndex<P> {
                 query_meta: &query_meta,
                 score_threshold: self.score_threshold,
                 query_precursor_mz,
+            },
+            k,
+            state,
+            top_k_state,
+            emit,
+        );
+        Ok(())
+    }
+
+    /// Modified search that returns the best `k` results above this index's
+    /// fixed threshold.
+    pub fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut state = self.new_search_state();
+        self.search_modified_top_k_with_state(query, k, &mut state)
+    }
+
+    /// Modified top-k search using caller-provided scratch state.
+    pub fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut top_k_state = TopKSearchState::new();
+        let mut results = Vec::new();
+        self.for_each_modified_top_k_with_state(query, k, state, &mut top_k_state, |result| {
+            results.push(result)
+        })?;
+        Ok(results)
+    }
+
+    /// Stream modified top-k results using caller-provided scratch state.
+    pub fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        let (query_mz, query_data) = prepare_cosine_query(
+            query,
+            self.mz_power,
+            self.intensity_power,
+            self.inner.tolerance,
+        )?;
+        let query_meta = CosineKernel::spectrum_meta(&query_data);
+        let precursor_f64 = ensure_finite(query.precursor_mz().to_f64(), "query_precursor_mz")?;
+        self.inner.for_each_modified_top_k_with_state(
+            DirectThresholdSearch {
+                query_mz: &query_mz,
+                query_data: &query_data,
+                query_meta: &query_meta,
+                score_threshold: self.score_threshold,
+                query_precursor_mz: Some(precursor_f64),
             },
             k,
             state,
@@ -2709,6 +2845,44 @@ impl<P: SpectrumFloat + Sync> SpectraIndex for FlashCosineIndex<P> {
     {
         self.for_each_top_k_with_state(query, k, state, top_k_state, emit)
     }
+
+    fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k(query, k)
+    }
+
+    fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k_with_state(query, k, state)
+    }
+
+    fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        self.for_each_modified_top_k_with_state(query, k, state, top_k_state, emit)
+    }
 }
 
 impl<P: SpectrumFloat + Sync> SpectraIndex for FlashCosineThresholdIndex<P> {
@@ -2782,6 +2956,44 @@ impl<P: SpectrumFloat + Sync> SpectraIndex for FlashCosineThresholdIndex<P> {
         Emit: FnMut(FlashSearchResult),
     {
         self.for_each_top_k_with_state(query, k, state, top_k_state, emit)
+    }
+
+    fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k(query, k)
+    }
+
+    fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k_with_state(query, k, state)
+    }
+
+    fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        self.for_each_modified_top_k_with_state(query, k, state, top_k_state, emit)
     }
 }
 

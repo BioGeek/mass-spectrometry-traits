@@ -6,9 +6,10 @@
 use mass_spectrometry::prelude::{
     CocaineSpectrum, FlashCosineIndex, FlashCosineIndexError, FlashCosineThresholdIndex,
     FlashIndexBuildPhase, FlashIndexBuildProgress, FlashSearchResult, GenericSpectrum,
-    GlucoseSpectrum, HydroxyCholesterolSpectrum, LinearCosine, PhenylalanineSpectrum,
-    SalicinSpectrum, ScalarSimilarity, SimilarityComputationError, SimilarityConfigError,
-    SpectraIndex, SpectraIndexBuilder, Spectrum, SpectrumAlloc, SpectrumMut, TopKSearchState,
+    GlucoseSpectrum, HydroxyCholesterolSpectrum, LinearCosine, ModifiedLinearCosine,
+    PhenylalanineSpectrum, SalicinSpectrum, ScalarSimilarity, SimilarityComputationError,
+    SimilarityConfigError, SpectraIndex, SpectraIndexBuilder, Spectrum, SpectrumAlloc, SpectrumMut,
+    TopKSearchState,
 };
 #[cfg(feature = "rayon")]
 use mass_spectrometry::prelude::{FlashCosineSelfSimilarityIndex, PepmassFilter};
@@ -323,6 +324,24 @@ fn assert_results_close(
     }
 }
 
+fn assert_ranked_results_close(
+    actual: Vec<FlashSearchResult>,
+    expected: Vec<FlashSearchResult>,
+    label: &str,
+) {
+    assert_eq!(actual.len(), expected.len(), "{label}: result count");
+    for (actual, expected) in actual.iter().zip(expected.iter()) {
+        assert_eq!(actual.spectrum_id, expected.spectrum_id, "{label}: id");
+        assert_eq!(actual.n_matches, expected.n_matches, "{label}: matches");
+        assert!(
+            (actual.score - expected.score).abs() <= 1.0e-12,
+            "{label}: score {} != {}",
+            actual.score,
+            expected.score
+        );
+    }
+}
+
 fn top_k_expected(
     mut results: Vec<FlashSearchResult>,
     k: usize,
@@ -338,6 +357,29 @@ fn top_k_expected(
     });
     results.truncate(k);
     results
+}
+
+fn naive_modified_cosine_top_k(
+    library: &[GenericSpectrum],
+    query: &GenericSpectrum,
+    k: usize,
+    score_threshold: f64,
+) -> Vec<FlashSearchResult> {
+    let scorer = ModifiedLinearCosine::new(1.0, 1.0, 0.1).expect("valid scorer config");
+    let mut results = Vec::new();
+    for (spectrum_id, library_spectrum) in library.iter().enumerate() {
+        let (score, n_matches) = scorer
+            .similarity(query, library_spectrum)
+            .expect("modified linear cosine should succeed");
+        if score > 0.0 {
+            results.push(FlashSearchResult {
+                spectrum_id: spectrum_id as u32,
+                score,
+                n_matches,
+            });
+        }
+    }
+    top_k_expected(results, k, score_threshold)
 }
 
 #[test]
@@ -1932,6 +1974,82 @@ fn modified_search_with_state_reuses_buffers_without_leaking_matches() {
 }
 
 #[test]
+fn modified_top_k_matches_naive_modified_linear_cosine_and_reuses_state() {
+    let library = vec![
+        make_spectrum_f64(300.0, &[(100.0, 10.0), (200.0, 5.0)]),
+        make_spectrum_f64(300.0, &[(100.0, 10.0), (200.0, 5.0)]),
+        make_spectrum_f64(300.0, &[(200.0, 5.0)]),
+        make_spectrum_f64(450.0, &[(120.0, 8.0), (240.0, 4.0)]),
+        make_spectrum_f64(310.0, &[(100.0, 9.0), (210.0, 4.0)]),
+    ];
+    let query = make_spectrum_f64(310.0, &[(100.0, 10.0), (210.0, 5.0)]);
+    let index = build_cosine_index(1.0_f64, 1.0_f64, 0.1_f64, library.iter())
+        .expect("index build should succeed");
+    let mut state = index.new_search_state();
+    let mut top_k_state = TopKSearchState::new();
+
+    for k in [1_usize, 3, 10] {
+        let expected = naive_modified_cosine_top_k(&library, &query, k, 0.0);
+        let from_full_search = top_k_expected(
+            index
+                .search_modified(&query)
+                .expect("modified search should succeed"),
+            k,
+            0.0,
+        );
+        assert_ranked_results_close(
+            from_full_search,
+            expected.clone(),
+            "full modified top-k oracle",
+        );
+
+        let stateless = index
+            .search_modified_top_k(&query, k)
+            .expect("modified top-k should succeed");
+        assert_ranked_results_close(stateless, expected.clone(), "stateless modified top-k");
+
+        let stateful = index
+            .search_modified_top_k_with_state(&query, k, &mut state)
+            .expect("stateful modified top-k should succeed");
+        assert_ranked_results_close(stateful, expected.clone(), "stateful modified top-k");
+
+        let mut streamed = Vec::new();
+        index
+            .for_each_modified_top_k_with_state(&query, k, &mut state, &mut top_k_state, |hit| {
+                streamed.push(hit)
+            })
+            .expect("streaming modified top-k should succeed");
+        assert_ranked_results_close(streamed, expected, "streamed modified top-k");
+    }
+
+    assert!(
+        index
+            .search_modified_top_k(&query, 0)
+            .expect("zero-k modified top-k should succeed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn threshold_index_modified_top_k_respects_fixed_score_threshold() {
+    let library = vec![
+        make_spectrum_f64(300.0, &[(100.0, 10.0), (200.0, 5.0)]),
+        make_spectrum_f64(300.0, &[(200.0, 5.0)]),
+        make_spectrum_f64(450.0, &[(120.0, 8.0), (240.0, 4.0)]),
+    ];
+    let query = make_spectrum_f64(310.0, &[(100.0, 10.0), (210.0, 5.0)]);
+    let threshold = 0.7;
+    let index = build_threshold_index(1.0_f64, 1.0_f64, 0.1_f64, threshold, library.iter())
+        .expect("threshold index build should succeed");
+
+    let expected = naive_modified_cosine_top_k(&library, &query, 4, threshold);
+    let actual = index
+        .search_modified_top_k(&query, 4)
+        .expect("threshold modified top-k should succeed");
+    assert_ranked_results_close(actual, expected, "threshold modified top-k");
+}
+
+#[test]
 fn constructor_and_query_validation_errors_are_exposed() {
     let spectra = reference_spectra();
 
@@ -1987,6 +2105,12 @@ fn constructor_and_query_validation_errors_are_exposed() {
     let mut state = index.new_search_state();
     assert!(matches!(
         index.search_modified_with_state(&bad_query, &mut state),
+        Err(SimilarityComputationError::NonFiniteValue(
+            "query_precursor_mz"
+        ))
+    ));
+    assert!(matches!(
+        index.search_modified_top_k(&bad_query, 1),
         Err(SimilarityComputationError::NonFiniteValue(
             "query_precursor_mz"
         ))

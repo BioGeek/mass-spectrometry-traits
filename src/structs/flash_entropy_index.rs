@@ -1243,6 +1243,70 @@ impl<P: SpectrumFloat + Sync> FlashEntropyIndex<P> {
             .search_modified_with_state(&query_mz, &query_data, &(), precursor_f64, state))
     }
 
+    /// Modified entropy search that returns the best `k` results by
+    /// descending score.
+    pub fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut state = self.new_search_state();
+        self.search_modified_top_k_with_state(query, k, &mut state)
+    }
+
+    /// Modified entropy top-k search using caller-provided scratch state.
+    pub fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        let mut top_k_state = TopKSearchState::new();
+        let mut results = Vec::new();
+        self.for_each_modified_top_k_with_state(query, k, state, &mut top_k_state, |result| {
+            results.push(result)
+        })?;
+        Ok(results)
+    }
+
+    /// Stream modified entropy top-k results using caller-provided scratch
+    /// state.
+    pub fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        let (query_mz, query_data) = self.prepare_query(query)?;
+        let precursor_f64 = ensure_finite(query.precursor_mz().to_f64(), "query_precursor_mz")?;
+        self.inner.for_each_modified_top_k_with_state(
+            DirectThresholdSearch {
+                query_mz: &query_mz,
+                query_data: &query_data,
+                query_meta: &(),
+                score_threshold: 0.0,
+                query_precursor_mz: Some(precursor_f64),
+            },
+            k,
+            state,
+            top_k_state,
+            emit,
+        );
+        Ok(())
+    }
+
     /// Prepare query peaks: normalize, optionally weight, validate.
     fn prepare_query<S>(
         &self,
@@ -1343,6 +1407,44 @@ impl<P: SpectrumFloat + Sync> SpectraIndex for FlashEntropyIndex<P> {
         Emit: FnMut(FlashSearchResult),
     {
         self.for_each_top_k_with_state(query, k, state, top_k_state, emit)
+    }
+
+    fn search_modified_top_k<S>(
+        &self,
+        query: &S,
+        k: usize,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k(query, k)
+    }
+
+    fn search_modified_top_k_with_state<S>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+    ) -> Result<Vec<FlashSearchResult>, SimilarityComputationError>
+    where
+        S: Spectrum,
+    {
+        self.search_modified_top_k_with_state(query, k, state)
+    }
+
+    fn for_each_modified_top_k_with_state<S, Emit>(
+        &self,
+        query: &S,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) -> Result<(), SimilarityComputationError>
+    where
+        S: Spectrum,
+        Emit: FnMut(FlashSearchResult),
+    {
+        self.for_each_modified_top_k_with_state(query, k, state, top_k_state, emit)
     }
 }
 

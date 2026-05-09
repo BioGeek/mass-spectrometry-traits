@@ -17,7 +17,8 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use mass_spectrometry::prelude::{
     FlashCosineIndex, FlashCosineThresholdIndex, FlashEntropyIndex, FlashSearchResult,
     LinearCosine, LinearEntropy, ModifiedLinearCosine, ModifiedLinearEntropy, RandomSpectrumConfig,
-    ScalarSimilarity, SpectraIndexBuilder, Spectrum, SpectrumAlloc, SpectrumMut, TopKSearchState,
+    ScalarSimilarity, SearchState, SpectraIndexBuilder, Spectrum, SpectrumAlloc, SpectrumMut,
+    TopKSearchState,
 };
 
 type BenchSpectrum = mass_spectrometry::prelude::GenericSpectrum;
@@ -242,6 +243,114 @@ fn modified_cosine_with_index(index: &FlashCosineIndex, query: &BenchSpectrum) -
         match_sum += result.n_matches;
     }
     (score_sum, match_sum)
+}
+
+fn modified_cosine_top_k_without_index(
+    scorer: &ModifiedLinearCosine,
+    query: &BenchSpectrum,
+    library: &[BenchSpectrum],
+    k: usize,
+) -> (f64, usize) {
+    let mut results = Vec::new();
+    for (spectrum_id, library_spectrum) in library.iter().enumerate() {
+        let (score, n_matches) = scorer
+            .similarity(query, library_spectrum)
+            .expect("modified cosine similarity should succeed");
+        if score > 0.0 {
+            results.push(FlashSearchResult {
+                spectrum_id: spectrum_id as u32,
+                score,
+                n_matches,
+            });
+        }
+    }
+    let results = ranked_top_k(results, k);
+    summarize_results(&results)
+}
+
+fn modified_cosine_top_k_with_index(
+    index: &FlashCosineIndex,
+    query: &BenchSpectrum,
+    k: usize,
+    state: &mut SearchState,
+    top_k_state: &mut TopKSearchState,
+) -> (f64, usize) {
+    let mut score_sum = 0.0;
+    let mut match_sum = 0usize;
+    index
+        .for_each_modified_top_k_with_state(query, k, state, top_k_state, |result| {
+            score_sum += result.score;
+            match_sum += result.n_matches;
+        })
+        .expect("flash modified cosine top-k search should succeed");
+    (score_sum, match_sum)
+}
+
+fn modified_cosine_top_k_then_sort_with_index(
+    index: &FlashCosineIndex,
+    query: &BenchSpectrum,
+    k: usize,
+    state: &mut SearchState,
+) -> (f64, usize) {
+    let results = index
+        .search_modified_with_state(query, state)
+        .expect("flash modified cosine search should succeed");
+    let results = ranked_top_k(results, k);
+    summarize_results(&results)
+}
+
+fn modified_entropy_top_k_without_index(
+    scorer: &ModifiedLinearEntropy,
+    query: &BenchSpectrum,
+    library: &[BenchSpectrum],
+    k: usize,
+) -> (f64, usize) {
+    let mut results = Vec::new();
+    for (spectrum_id, library_spectrum) in library.iter().enumerate() {
+        let (score, n_matches) = scorer
+            .similarity(query, library_spectrum)
+            .expect("modified entropy similarity should succeed");
+        if score > 0.0 {
+            results.push(FlashSearchResult {
+                spectrum_id: spectrum_id as u32,
+                score,
+                n_matches,
+            });
+        }
+    }
+    let results = ranked_top_k(results, k);
+    summarize_results(&results)
+}
+
+fn modified_entropy_top_k_with_index(
+    index: &FlashEntropyIndex,
+    query: &BenchSpectrum,
+    k: usize,
+    state: &mut SearchState,
+    top_k_state: &mut TopKSearchState,
+) -> (f64, usize) {
+    let mut score_sum = 0.0;
+    let mut match_sum = 0usize;
+    index
+        .for_each_modified_top_k_with_state(query, k, state, top_k_state, |result| {
+            score_sum += result.score;
+            match_sum += result.n_matches;
+        })
+        .expect("flash modified entropy top-k search should succeed");
+    (score_sum, match_sum)
+}
+
+fn modified_entropy_top_k_then_sort_with_index(
+    index: &FlashEntropyIndex,
+    query: &BenchSpectrum,
+    k: usize,
+    state: &mut SearchState,
+) -> (f64, usize) {
+    let results = index
+        .search_modified_with_state(query, state)
+        .expect("flash modified entropy search should succeed");
+    let results = ranked_top_k(results, k);
+    summarize_results(&results)
 }
 
 fn entropy_with_index(index: &FlashEntropyIndex, query: &BenchSpectrum) -> (f64, usize) {
@@ -497,6 +606,67 @@ fn bench_index_search(c: &mut Criterion) {
     }
     top_k_group.finish();
 
+    let mut modified_top_k_group = c.benchmark_group("library_search_modified_cosine_top_k");
+    modified_top_k_group.sample_size(10);
+    let mut state = flash_cosine_top_k.new_search_state();
+    let mut top_k_state = TopKSearchState::new();
+    modified_top_k_group.bench_function("with_index_flash_modified_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_cosine_top_k_with_index(
+                    &flash_cosine_top_k,
+                    black_box(query),
+                    black_box(top_k),
+                    &mut state,
+                    &mut top_k_state,
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+
+    let mut state = flash_cosine_top_k.new_search_state();
+    modified_top_k_group.bench_function("with_index_flash_modified_then_sort_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_cosine_top_k_then_sort_with_index(
+                    &flash_cosine_top_k,
+                    black_box(query),
+                    black_box(top_k),
+                    &mut state,
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+
+    modified_top_k_group.bench_function("without_index_modified_linear_scan_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_cosine_top_k_without_index(
+                    &modified_linear_cosine,
+                    black_box(query),
+                    black_box(&top_k_library),
+                    black_box(top_k),
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+    modified_top_k_group.finish();
+
     let mut entropy_top_k_group = c.benchmark_group("library_search_entropy_top_k");
     entropy_top_k_group.sample_size(10);
     for top_k_threshold in [0.5_f64, 0.7_f64, 0.9_f64] {
@@ -566,6 +736,68 @@ fn bench_index_search(c: &mut Criterion) {
         );
     }
     entropy_top_k_group.finish();
+
+    let mut modified_entropy_top_k_group =
+        c.benchmark_group("library_search_modified_entropy_top_k");
+    modified_entropy_top_k_group.sample_size(10);
+    let mut state = flash_entropy_top_k.new_search_state();
+    let mut top_k_state = TopKSearchState::new();
+    modified_entropy_top_k_group.bench_function("with_index_flash_modified_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_entropy_top_k_with_index(
+                    &flash_entropy_top_k,
+                    black_box(query),
+                    black_box(top_k),
+                    &mut state,
+                    &mut top_k_state,
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+
+    let mut state = flash_entropy_top_k.new_search_state();
+    modified_entropy_top_k_group.bench_function("with_index_flash_modified_then_sort_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_entropy_top_k_then_sort_with_index(
+                    &flash_entropy_top_k,
+                    black_box(query),
+                    black_box(top_k),
+                    &mut state,
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+
+    modified_entropy_top_k_group.bench_function("without_index_modified_linear_scan_top_k", |b| {
+        b.iter(|| {
+            let mut total_score = 0.0;
+            let mut total_matches = 0usize;
+            for query in top_k_library.iter().take(top_k_query_count) {
+                let (score, matches) = modified_entropy_top_k_without_index(
+                    &modified_linear_entropy,
+                    black_box(query),
+                    black_box(&top_k_library),
+                    black_box(top_k),
+                );
+                total_score += score;
+                total_matches += matches;
+            }
+            black_box((total_score, total_matches))
+        })
+    });
+    modified_entropy_top_k_group.finish();
 
     let mut modified_group = c.benchmark_group("library_search_modified_cosine");
     modified_group.bench_function("with_index_flash_modified", |b| {

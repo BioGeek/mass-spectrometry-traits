@@ -3135,8 +3135,97 @@ impl<K: FlashKernel, P: SpectrumFloat + Sync> FlashIndex<K, P> {
         state: &mut SearchState,
     ) -> Vec<FlashSearchResult> {
         state.reset_diagnostics();
+        self.accumulate_modified_matches_with_state(
+            query_mz,
+            query_data,
+            query_precursor_mz,
+            state,
+        );
+
+        let mut results = Vec::with_capacity(state.acc.touched_len());
+        state.acc.drain(|spec_id, raw, count| {
+            let score = K::finalize(
+                raw,
+                count as usize,
+                query_meta,
+                &self.spectrum_meta[spec_id as usize],
+            );
+            if score > 0.0 {
+                results.push(FlashSearchResult {
+                    spectrum_id: self.public_spectrum_id(spec_id),
+                    score,
+                    n_matches: count as usize,
+                });
+            }
+        });
+
+        results
+    }
+
+    /// Modified top-k search using caller-provided scratch state.
+    pub(crate) fn for_each_modified_top_k_with_state<Q, Emit>(
+        &self,
+        search: DirectThresholdSearch<'_, K, Q>,
+        k: usize,
+        state: &mut SearchState,
+        top_k_state: &mut TopKSearchState,
+        emit: Emit,
+    ) where
+        Q: SpectrumFloat,
+        Emit: FnMut(FlashSearchResult),
+    {
+        state.reset_diagnostics();
+        let mut top_k = TopKSearchResults::new(k, search.score_threshold, top_k_state);
+        if k == 0
+            || search.score_threshold > 1.0
+            || self.n_spectra == 0
+            || search.query_mz.is_empty()
+        {
+            state.add_results_emitted(top_k.len());
+            top_k.emit(emit);
+            return;
+        }
+        let query_precursor_mz = search
+            .query_precursor_mz
+            .expect("modified search requires a query precursor m/z");
+
+        self.accumulate_modified_matches_with_state(
+            search.query_mz,
+            search.query_data,
+            query_precursor_mz,
+            state,
+        );
+
+        state.acc.drain(|spec_id, raw, count| {
+            let score = K::finalize(
+                raw,
+                count as usize,
+                search.query_meta,
+                &self.spectrum_meta[spec_id as usize],
+            );
+            if score > 0.0 {
+                top_k.push(FlashSearchResult {
+                    spectrum_id: self.public_spectrum_id(spec_id),
+                    score,
+                    n_matches: count as usize,
+                });
+            }
+        });
+
+        state.add_results_emitted(top_k.len());
+        top_k.emit(emit);
+    }
+
+    /// Accumulate direct and neutral-loss modified matches into `state.acc`.
+    fn accumulate_modified_matches_with_state<Q: SpectrumFloat>(
+        &self,
+        query_mz: &[Q],
+        query_data: &[Q],
+        query_precursor_mz: f64,
+        state: &mut SearchState,
+    ) {
         if self.n_spectra == 0 || query_mz.is_empty() {
-            return Vec::new();
+            return;
         }
 
         state.acc.ensure_capacity(self.n_spectra as usize);
@@ -3194,25 +3283,6 @@ impl<K: FlashKernel, P: SpectrumFloat + Sync> FlashIndex<K, P> {
             matched_products.set(idx, false);
             direct_scores[idx] = 0.0;
         }
-
-        let mut results = Vec::with_capacity(acc.touched.len());
-        acc.drain(|spec_id, raw, count| {
-            let score = K::finalize(
-                raw,
-                count as usize,
-                query_meta,
-                &self.spectrum_meta[spec_id as usize],
-            );
-            if score > 0.0 {
-                results.push(FlashSearchResult {
-                    spectrum_id: self.public_spectrum_id(spec_id),
-                    score,
-                    n_matches: count as usize,
-                });
-            }
-        });
-
-        results
     }
 }
 
