@@ -182,6 +182,58 @@ pub trait SpectrumAlloc: SpectrumMut + Sized {
         Ok(spectrum)
     }
 
+    /// Returns a new spectrum whose intensities are rescaled so the maximum
+    /// intensity equals `1.0` (base-peak / L∞ normalization).
+    ///
+    /// The rescaled intensities are computed in `f64` and converted back to
+    /// [`Self::Precision`]. Peaks whose normalized intensity rounds to a
+    /// non-positive value at the target precision are dropped, mirroring the
+    /// underflow handling used elsewhere in the crate (e.g. `MsEntropyCleanSpectrum`).
+    ///
+    /// An empty spectrum and a spectrum whose maximum intensity is not
+    /// positive both yield an empty result with the original `precursor_mz`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::MutationError`] if constructing the new spectrum or
+    /// adding one of the rescaled peaks fails.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mass_spectrometry::prelude::*;
+    ///
+    /// let mut spectrum: GenericSpectrum = GenericSpectrum::try_with_capacity(250.0, 3).unwrap();
+    /// spectrum
+    ///     .add_peaks([(50.0, 2.0), (75.0, 5.0), (100.0, 4.0)])
+    ///     .unwrap();
+    ///
+    /// let normalized: GenericSpectrum = spectrum.intensity_normalized().unwrap();
+    /// let peaks: Vec<(f64, f64)> = normalized.peaks().collect();
+    /// assert_eq!(peaks, vec![(50.0, 0.4), (75.0, 1.0), (100.0, 0.8)]);
+    /// ```
+    fn intensity_normalized(&self) -> Result<Self, Self::MutationError> {
+        let max_intensity = self
+            .intensities()
+            .map(SpectrumFloat::to_f64)
+            .fold(0.0_f64, f64::max);
+
+        let mut spectrum = Self::with_capacity(self.precursor_mz().to_f64(), self.len())?;
+
+        if !(max_intensity > 0.0 && max_intensity.is_finite()) {
+            return Ok(spectrum);
+        }
+
+        for (mz, intensity) in self.peaks() {
+            let rescaled = Self::Precision::from_f64_lossy(intensity.to_f64() / max_intensity);
+            if rescaled.to_f64() > 0.0 {
+                spectrum.add_peak(mz, rescaled)?;
+            }
+        }
+
+        Ok(spectrum)
+    }
+
     /// Generate a random spectrum from a parameterized configuration.
     ///
     /// Generation is deterministic for a fixed `seed` and `config`.
@@ -340,6 +392,47 @@ mod tests {
                 "n_peaks and min_peak_gap exceed [mz_min, mz_max] span"
             )
         ));
+    }
+
+    #[test]
+    fn intensity_normalized_rescales_to_base_peak() {
+        let mut spectrum: GenericSpectrum = GenericSpectrum::try_with_capacity(250.0, 3).unwrap();
+        spectrum
+            .add_peaks([(50.0, 2.0), (75.0, 5.0), (100.0, 4.0)])
+            .unwrap();
+
+        let normalized: GenericSpectrum = spectrum
+            .intensity_normalized()
+            .expect("base-peak normalization should succeed");
+
+        let peaks: Vec<(f64, f64)> = normalized.peaks().collect();
+        assert_eq!(peaks, alloc::vec![(50.0, 0.4), (75.0, 1.0), (100.0, 0.8)]);
+        assert_eq!(normalized.precursor_mz(), 250.0);
+    }
+
+    #[test]
+    fn intensity_normalized_empty_spectrum_returns_empty() {
+        let spectrum: GenericSpectrum = GenericSpectrum::try_with_capacity(150.0, 0).unwrap();
+        let normalized: GenericSpectrum = spectrum
+            .intensity_normalized()
+            .expect("empty spectrum should normalize trivially");
+        assert!(normalized.is_empty());
+        assert_eq!(normalized.precursor_mz(), 150.0);
+    }
+
+    #[test]
+    fn intensity_normalized_is_idempotent_under_proportional_scaling() {
+        let mut a: GenericSpectrum = GenericSpectrum::try_with_capacity(200.0, 2).unwrap();
+        a.add_peaks([(10.0, 1.0), (20.0, 4.0)]).unwrap();
+        let mut b: GenericSpectrum = GenericSpectrum::try_with_capacity(200.0, 2).unwrap();
+        b.add_peaks([(10.0, 100.0), (20.0, 400.0)]).unwrap();
+
+        let normalized_a: GenericSpectrum = a.intensity_normalized().unwrap();
+        let normalized_b: GenericSpectrum = b.intensity_normalized().unwrap();
+
+        let peaks_a: Vec<(f64, f64)> = normalized_a.peaks().collect();
+        let peaks_b: Vec<(f64, f64)> = normalized_b.peaks().collect();
+        assert_eq!(peaks_a, peaks_b);
     }
 
     #[test]
