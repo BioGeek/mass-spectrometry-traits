@@ -6,9 +6,6 @@
 //! One panic per parameter point that exceeds tolerance, with the failing
 //! `(mz_power, intensity_power, mz_tolerance)` in the message.
 
-use burn::backend::Cuda;
-use burn::backend::cuda::CudaDevice;
-
 use crate::burn::{
     EntropyMetric, KernelMetric, LinearCosineMetric, LinearEntropyMetric,
     ModifiedLinearCosineMetric, ModifiedLinearEntropyMetric, PairedConfig, SpectralKernelBackend,
@@ -22,7 +19,15 @@ use super::fixtures::{
     pair_rows, pairwise_params_constant, reference_spectra_at,
 };
 
-type TestBackend = Cuda<f32, i32>;
+// Backend selection: prefer CUDA when both features are enabled (it's faster
+// on dev machines with GPUs). Fall back to the MLIR-based CPU runtime
+// (`burn-cpu`) so the equivalence tests can run in CI without a GPU.
+#[cfg(feature = "burn-cuda")]
+type TestBackend = burn::backend::Cuda<f32, i32>;
+#[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+type TestBackend = burn::backend::Cpu<f32, i32>;
+
+type TestDevice = burn::tensor::Device<TestBackend>;
 
 /// Score every reference-spectrum pair on the GPU under metric `M`, with a
 /// pre-built [`PairedConfig<M>`]. Shared by the cosine and entropy harnesses
@@ -37,7 +42,7 @@ fn run_paired_test_with_config<M, F>(
     TestBackend: SpectralKernelBackend<M>,
     F: Fn(ParameterPoint, &ReferenceSpectrum, &ReferenceSpectrum) -> f32 + Copy,
 {
-    let device = CudaDevice::default();
+    let device = TestDevice::default();
 
     for &point in CANONICAL_PARAMETER_POINTS {
         let spectra = reference_spectra_at(point.mz_tolerance);

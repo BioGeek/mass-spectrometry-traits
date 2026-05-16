@@ -1,9 +1,6 @@
 //! Cross / all-pairs (`[M, P] x [N, P] -> [M, N]`) equivalence tests, swept
 //! across [`CANONICAL_PARAMETER_POINTS`] (exponent + tolerance regimes).
 
-use burn::backend::Cuda;
-use burn::backend::cuda::CudaDevice;
-
 use crate::burn::{
     CrossConfig, EntropyMetric, KernelMetric, LinearCosineMetric, LinearEntropyMetric,
     ModifiedLinearCosineMetric, ModifiedLinearEntropyMetric, SpectralKernelBackend, cross_kernel,
@@ -15,7 +12,12 @@ use super::fixtures::{
     reference_spectra_at, spectrum_batch, spectrum_rows,
 };
 
-type TestBackend = Cuda<f32, i32>;
+#[cfg(feature = "burn-cuda")]
+type TestBackend = burn::backend::Cuda<f32, i32>;
+#[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+type TestBackend = burn::backend::Cpu<f32, i32>;
+
+type TestDevice = burn::tensor::Device<TestBackend>;
 
 const CROSS_M: usize = 8;
 const CROSS_N: usize = 12;
@@ -30,7 +32,7 @@ fn run_cross_test_with<M, F, MakeConfig>(
     F: Fn(ParameterPoint, &ReferenceSpectrum, &ReferenceSpectrum) -> f32 + Copy,
     MakeConfig: Fn(ParameterPoint) -> CrossConfig<M>,
 {
-    let device = CudaDevice::default();
+    let device = TestDevice::default();
 
     for &point in CANONICAL_PARAMETER_POINTS {
         let spectra = reference_spectra_at(point.mz_tolerance);

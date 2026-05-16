@@ -66,6 +66,10 @@ pub const CANONICAL_PARAMETER_POINTS: &[ParameterPoint] = &[
 ];
 
 /// Single-point default for tests that want the baseline scoring without sweeping.
+#[cfg_attr(
+    not(any(feature = "burn-autodiff", feature = "burn-fusion")),
+    allow(dead_code)
+)]
 pub const DEFAULT_TEST_POINT: ParameterPoint = ParameterPoint {
     mz_power: TEST_MZ_POWER,
     intensity_power: TEST_INTENSITY_POWER,

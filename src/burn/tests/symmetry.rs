@@ -7,9 +7,6 @@
 //! * **Self-similarity**: `sim(a, a) ~ 1.0` for every reference spectrum
 //!   under every metric.
 
-use burn::backend::Cuda;
-use burn::backend::cuda::CudaDevice;
-
 use crate::burn::{
     KernelMetric, LinearCosineMetric, LinearEntropyMetric, ModifiedLinearCosineMetric,
     ModifiedLinearEntropyMetric, PairedConfig, SpectralKernelBackend, paired_kernel,
@@ -20,7 +17,12 @@ use super::fixtures::{
     entropy_paired_config, pair_batches, pair_rows, pairwise_params_constant, reference_spectra,
 };
 
-type TestBackend = Cuda<f32, i32>;
+#[cfg(feature = "burn-cuda")]
+type TestBackend = burn::backend::Cuda<f32, i32>;
+#[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+type TestBackend = burn::backend::Cpu<f32, i32>;
+
+type TestDevice = burn::tensor::Device<TestBackend>;
 
 const SYMMETRY_BATCH: usize = 8;
 const SCORE_TOLERANCE: f32 = 2.0e-4;
@@ -31,7 +33,7 @@ where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
 {
-    let device = CudaDevice::default();
+    let device = TestDevice::default();
     let row_count = pairs.indices.len();
     let (left, right) = pair_batches::<TestBackend>(pairs, &device);
     let params = pairwise_params_constant::<TestBackend>(

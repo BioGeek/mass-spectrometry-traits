@@ -6,8 +6,6 @@
 //! (`sim in [0, 1]`, identical-spectra self-similarity, disjoint-spectra zero)
 //! are asserted alongside CPU equivalence.
 
-use burn::backend::Cuda;
-use burn::backend::cuda::CudaDevice;
 use burn::tensor::{Tensor as BurnTensor, TensorData};
 use geometric_traits::prelude::ScalarSimilarity;
 
@@ -23,7 +21,12 @@ use super::fixtures::{
     cosine_paired_config, entropy_paired_config,
 };
 
-type TestBackend = Cuda<f32, i32>;
+#[cfg(feature = "burn-cuda")]
+type TestBackend = burn::backend::Cuda<f32, i32>;
+#[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+type TestBackend = burn::backend::Cpu<f32, i32>;
+
+type TestDevice = burn::tensor::Device<TestBackend>;
 
 const TOLERANCE_LINEAR: f32 = 1.0e-4;
 const TOLERANCE_MODIFIED: f32 = 2.0e-4;
@@ -49,7 +52,7 @@ where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
 {
-    let device = CudaDevice::default();
+    let device = TestDevice::default();
     let peak_width = left.len().max(right.len()).max(1);
 
     let mut left_mz = vec![0.0_f32; peak_width];

@@ -144,3 +144,41 @@ jobs:
 
       - name: cargo doc (full GPU feature set)
         run: cargo doc --locked --features ${{ env.GPU_FEATURES }} --no-deps
+
+  # Run the Burn-kernel equivalence test suite (`src/burn/tests/`) against the
+  # `cubecl-cpu` MLIR runtime instead of CUDA. The tests are parameterized so
+  # the same assertions hold on either backend; this job catches kernel logic
+  # regressions on every PR without GPU hardware. `tracel-llvm-bundler` pulls a
+  # ~580 MB prebuilt LLVM 20.1.4 tarball from `tracel-ai/tracel-llvm` releases
+  # on cold cache. The autodiff and fusion test files stay CUDA-only (gated in
+  # `src/burn/tests/autodiff.rs` and `src/burn/tests/fusion.rs`) since they
+  # exercise CUDA-specific wrapper integration, not portable kernel logic.
+  cpu-runtime-test:
+    name: cpu-runtime-test
+    runs-on: ubuntu-latest
+    needs: prek
+    env:
+      CPU_RUNTIME_FEATURES: burn,burn-cpu,proptest,rayon
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache tracel-llvm prebuilt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/tracel
+          key: tracel-llvm-20.1.4-7-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: cpu-runtime
+
+      - name: Run kernel equivalence tests on CPU runtime
+        run: cargo test --release --locked --features ${{ env.CPU_RUNTIME_FEATURES }} --lib burn::tests
+
+      - name: Clippy under burn-cpu feature set
+        run: cargo clippy --all-targets --locked --features ${{ env.CPU_RUNTIME_FEATURES }} -- -D warnings

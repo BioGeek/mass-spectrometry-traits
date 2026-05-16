@@ -22,6 +22,7 @@ burn = ["std", "dep:burn", "dep:burn-cubecl", "dep:cubecl"]
 burn-autodiff = ["burn", "burn/autodiff"]
 burn-fusion = ["burn", "burn/fusion", "dep:burn-fusion", "dep:burn-ir"]
 burn-cuda = ["burn", "burn/cuda"]
+burn-cpu = ["burn", "burn/cpu"]
 burn-wgpu = ["burn", "burn/wgpu"]
 
 [dependencies]

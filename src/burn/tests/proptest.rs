@@ -9,10 +9,11 @@
 //! number of cases (`PROPTEST_CASES`) because every case launches a GPU
 //! kernel.
 
-#![cfg(all(feature = "burn-cuda", feature = "proptest"))]
+#![cfg(all(
+    any(feature = "burn-cuda", feature = "burn-cpu"),
+    feature = "proptest"
+))]
 
-use burn::backend::Cuda;
-use burn::backend::cuda::CudaDevice;
 use burn::tensor::{Tensor as BurnTensor, TensorData};
 use geometric_traits::prelude::ScalarSimilarity;
 use proptest::prelude::*;
@@ -24,7 +25,12 @@ use crate::burn::{
 };
 use crate::prelude::*;
 
-type TestBackend = Cuda<f32, i32>;
+#[cfg(feature = "burn-cuda")]
+type TestBackend = burn::backend::Cuda<f32, i32>;
+#[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+type TestBackend = burn::backend::Cpu<f32, i32>;
+
+type TestDevice = burn::tensor::Device<TestBackend>;
 
 const PROPTEST_CASES: u32 = 6;
 const EPSILON: f32 = 1.0e-8;
@@ -117,7 +123,7 @@ where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
 {
-    let device = CudaDevice::default();
+    let device = TestDevice::default();
     let n = spectra.len();
     let row_count = n * n;
 
