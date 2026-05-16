@@ -76,6 +76,24 @@ impl KernelMetric for LinearCosineMetric {
     const RANKING_FUSION_NAME: &'static str = "spectral_ranking_forward__linear_cosine";
 }
 
+/// Marker for the modified (precursor-shifted) linear cosine similarity metric.
+///
+/// When `|left_precursor - right_precursor| > tolerance`, the scorer
+/// additionally considers peak pairs shifted by the precursor delta, then
+/// runs a DP on the resulting conflict graph to pick the optimal one-to-one
+/// assignment.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ModifiedLinearCosineMetric;
+
+impl KernelMetric for ModifiedLinearCosineMetric {
+    const NAME: &'static str = "modified_linear_cosine";
+    const USES_PRECURSOR: bool = true;
+    const IS_ENTROPY: bool = false;
+    const PAIRED_FUSION_NAME: &'static str = "spectral_paired_forward__modified_linear_cosine";
+    const CROSS_FUSION_NAME: &'static str = "spectral_cross_forward__modified_linear_cosine";
+    const RANKING_FUSION_NAME: &'static str = "spectral_ranking_forward__modified_linear_cosine";
+}
+
 /// Marker trait satisfied only by entropy metrics. Used as a typestate
 /// bound so that the entropy-only `with_weighted` builder method on the
 /// config structs is inaccessible to cosine metrics at compile time. No
