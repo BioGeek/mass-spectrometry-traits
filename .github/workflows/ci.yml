@@ -89,3 +89,58 @@ jobs:
 
       - name: Build docs
         run: cargo doc --features ${{ env.CPU_FEATURES }} --no-deps
+
+  # Type-check + clippy + rustdoc the Burn-kernel GPU feature set without
+  # running anything. No GPU runtime is required: `cudarc` (transitively
+  # pulled in by `burn-cuda`) only loads `libcuda.so` at runtime via dlopen,
+  # but its build script generates FFI bindings against CUDA headers, so we
+  # install the CUDA toolkit (`nvcc` + `cudart`) for the bindgen step only.
+  #
+  # Pinned to ubuntu-22.04 because NVIDIA's CUDA apt repository only began
+  # shipping `ubuntu2404` packages from CUDA 12.5 onwards. The 12.4.1 install
+  # path used here fails on ubuntu-latest (24.04).
+  cuda-check:
+    name: cuda-check
+    runs-on: ubuntu-22.04
+    needs: prek
+    env:
+      CUDARC_CUDA_VERSION: "12040"
+      GPU_FEATURES: burn,burn-cuda,burn-autodiff,burn-fusion,proptest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: "12.4.1"
+          method: network
+          sub-packages: '["nvcc", "cudart"]'
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: cuda
+
+      # Two cargo check invocations because `src/burn/autodiff.rs`,
+      # `src/burn/fusion.rs`, and `src/burn/tests/{autodiff,fusion,proptest}.rs`
+      # are gated on their respective optional features. Running with both
+      # configurations ensures the `#[cfg]` gating actually compiles in
+      # either direction, e.g. a `use` that needs `feature = "burn-autodiff"`
+      # to gate it would be caught by the minimal-set check.
+      - name: cargo check (full GPU feature set)
+        run: cargo check --locked --features ${{ env.GPU_FEATURES }} --all-targets
+
+      - name: cargo check (minimal, only burn + burn-cuda)
+        run: cargo check --locked --features burn,burn-cuda --all-targets
+
+      - name: cargo clippy (full GPU feature set)
+        run: cargo clippy --locked --features ${{ env.GPU_FEATURES }} --all-targets -- -D warnings
+
+      - name: cargo doc (full GPU feature set)
+        run: cargo doc --locked --features ${{ env.GPU_FEATURES }} --no-deps
