@@ -88,3 +88,7 @@ harness = false
 [[bench]]
 name = "splash"
 harness = false
+
+[[example]]
+name = "pairwise_timing"
+required-features = ["burn", "burn-cuda", "rayon"]
