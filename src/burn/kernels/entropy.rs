@@ -114,8 +114,8 @@ pub fn linear_entropy_score_rows<F: Float>(
                 if right_int <= zero {
                     right_cursor += 1;
                 } else {
-                    let mz_left = left_mz
-                        [left_mz.stride(0) * left_row + left_mz.stride(1) * left_cursor];
+                    let mz_left =
+                        left_mz[left_mz.stride(0) * left_row + left_mz.stride(1) * left_cursor];
                     let mz_right = right_mz
                         [right_mz.stride(0) * right_row + right_mz.stride(1) * right_cursor];
                     let delta = mz_left - mz_right;
@@ -414,10 +414,8 @@ pub fn modified_linear_entropy_score_rows<F: Float>(
                         let edge = path[0] as usize;
                         let left_peak = candidate_left[edge] as usize;
                         let right_peak = candidate_right[edge] as usize;
-                        score += entropy_pair::<F>(
-                            left_products[left_peak],
-                            right_products[right_peak],
-                        );
+                        score +=
+                            entropy_pair::<F>(left_products[left_peak], right_products[right_peak]);
                     } else {
                         for path_index in 0..path_len {
                             let edge = path[path_index] as usize;

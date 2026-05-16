@@ -156,11 +156,8 @@ where
             batch_start + batch_items,
         );
 
-        let streams = OperationStreams::with_inputs([
-            &teacher.mz,
-            &teacher.intensity,
-            &teacher.precursor,
-        ]);
+        let streams =
+            OperationStreams::with_inputs([&teacher.mz, &teacher.intensity, &teacher.precursor]);
         let client = teacher.mz.client.clone();
         let candidate_count = config.effective_candidates_per_anchor();
         let candidate_shape = Shape::new([batch_items, candidate_count]);

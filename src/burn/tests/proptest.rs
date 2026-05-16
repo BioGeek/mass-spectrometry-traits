@@ -9,10 +9,7 @@
 //! number of cases (`PROPTEST_CASES`) because every case launches a GPU
 //! kernel.
 
-#![cfg(all(
-    any(feature = "burn-cuda", feature = "burn-cpu"),
-    feature = "proptest"
-))]
+#![cfg(all(any(feature = "burn-cuda", feature = "burn-cpu"), feature = "proptest"))]
 
 use burn::tensor::{Tensor as BurnTensor, TensorData};
 use geometric_traits::prelude::ScalarSimilarity;
@@ -58,11 +55,9 @@ struct GeneratedSpectrum {
 
 impl GeneratedSpectrum {
     fn to_reference(&self) -> GenericSpectrum<f32> {
-        let mut spectrum = GenericSpectrum::<f32>::try_with_capacity(
-            f64::from(self.precursor),
-            self.peaks.len(),
-        )
-        .expect("valid precursor");
+        let mut spectrum =
+            GenericSpectrum::<f32>::try_with_capacity(f64::from(self.precursor), self.peaks.len())
+                .expect("valid precursor");
         for &(mz, intensity) in &self.peaks {
             spectrum.add_peak(mz, intensity).expect("valid peak");
         }
@@ -77,22 +72,20 @@ impl GeneratedSpectrum {
 fn arb_spectrum() -> impl Strategy<Value = GeneratedSpectrum> {
     let min_gap = f64::from(2.0 * MAX_TOLERANCE + 1.0e-3);
     (50.0_f64..900.0_f64, MIN_PEAKS..=MAX_PEAKS).prop_flat_map(move |(precursor, n)| {
-        prop::collection::vec(
-            (0.0_f64..0.5_f64, 0.05_f64..1.0_f64),
-            n,
+        prop::collection::vec((0.0_f64..0.5_f64, 0.05_f64..1.0_f64), n).prop_map(
+            move |gaps_intensities| {
+                let mut peaks = Vec::with_capacity(gaps_intensities.len());
+                let mut mz = 30.0_f64;
+                for (extra_gap, intensity) in gaps_intensities {
+                    mz += min_gap + extra_gap;
+                    peaks.push((mz as f32, intensity as f32));
+                }
+                GeneratedSpectrum {
+                    precursor: precursor as f32,
+                    peaks,
+                }
+            },
         )
-        .prop_map(move |gaps_intensities| {
-            let mut peaks = Vec::with_capacity(gaps_intensities.len());
-            let mut mz = 30.0_f64;
-            for (extra_gap, intensity) in gaps_intensities {
-                mz += min_gap + extra_gap;
-                peaks.push((mz as f32, intensity as f32));
-            }
-            GeneratedSpectrum {
-                precursor: precursor as f32,
-                peaks,
-            }
-        })
     })
 }
 
@@ -145,18 +138,33 @@ where
 
     let left_batch = SpectrumBatch::<TestBackend>::new(
         BurnTensor::from_data(TensorData::new(left_mz, [row_count, PEAK_WIDTH]), &device),
-        BurnTensor::from_data(TensorData::new(left_intensity, [row_count, PEAK_WIDTH]), &device),
+        BurnTensor::from_data(
+            TensorData::new(left_intensity, [row_count, PEAK_WIDTH]),
+            &device,
+        ),
         BurnTensor::from_data(TensorData::new(left_precursor, [row_count]), &device),
     );
     let right_batch = SpectrumBatch::<TestBackend>::new(
         BurnTensor::from_data(TensorData::new(right_mz, [row_count, PEAK_WIDTH]), &device),
-        BurnTensor::from_data(TensorData::new(right_intensity, [row_count, PEAK_WIDTH]), &device),
+        BurnTensor::from_data(
+            TensorData::new(right_intensity, [row_count, PEAK_WIDTH]),
+            &device,
+        ),
         BurnTensor::from_data(TensorData::new(right_precursor, [row_count]), &device),
     );
     let params = PairwiseParams::<TestBackend>::new(
-        BurnTensor::from_data(TensorData::new(vec![mz_power; row_count], [row_count]), &device),
-        BurnTensor::from_data(TensorData::new(vec![intensity_power; row_count], [row_count]), &device),
-        BurnTensor::from_data(TensorData::new(vec![mz_tolerance; row_count], [row_count]), &device),
+        BurnTensor::from_data(
+            TensorData::new(vec![mz_power; row_count], [row_count]),
+            &device,
+        ),
+        BurnTensor::from_data(
+            TensorData::new(vec![intensity_power; row_count], [row_count]),
+            &device,
+        ),
+        BurnTensor::from_data(
+            TensorData::new(vec![mz_tolerance; row_count], [row_count]),
+            &device,
+        ),
     );
 
     let scores = paired_kernel::<TestBackend, M>(left_batch, right_batch, params, config)

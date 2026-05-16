@@ -33,11 +33,8 @@ type TestDevice = burn::tensor::Device<TestBackend>;
 /// pre-built [`PairedConfig<M>`]. Shared by the cosine and entropy harnesses
 /// since the only thing they differ on is whether the config has
 /// `with_weighted` applied.
-fn run_paired_test_with_config<M, F>(
-    cpu_score: F,
-    tolerance: f32,
-    config: PairedConfig<M>,
-) where
+fn run_paired_test_with_config<M, F>(cpu_score: F, tolerance: f32, config: PairedConfig<M>)
+where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
     F: Fn(ParameterPoint, &ReferenceSpectrum, &ReferenceSpectrum) -> f32 + Copy,

@@ -91,8 +91,7 @@ pub fn collect_modified_candidates<F: Float>(
     let mut right_cursor = 0usize;
     for left_peak in 0..left_peaks {
         if left_products[left_peak] > zero {
-            let left_value =
-                left_mz[left_row * left_mz.stride(0) + left_peak * left_mz.stride(1)];
+            let left_value = left_mz[left_row * left_mz.stride(0) + left_peak * left_mz.stride(1)];
             while right_cursor < right_peaks && right_products[right_cursor] <= zero {
                 right_cursor += 1;
             }
@@ -177,7 +176,7 @@ pub fn sort_and_dedupe_modified_candidates(
     let count = candidate_count as usize;
     let mut unique_count = 0u32;
     if count > 0usize {
-            for sort_index in 1..count {
+        for sort_index in 1..count {
             let key_left = candidate_left[sort_index];
             let key_right = candidate_right[sort_index];
             let mut insert_index = sort_index;

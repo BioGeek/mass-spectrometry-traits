@@ -162,8 +162,8 @@ pub fn prepare_linear_cosine_row<F: Float>(
     let mut intensity_max = zero;
     let mut mz_max = zero;
     for peak in 0..peak_count {
-        let intensity = intensity_tensor
-            [row * intensity_tensor.stride(0) + peak * intensity_tensor.stride(1)];
+        let intensity =
+            intensity_tensor[row * intensity_tensor.stride(0) + peak * intensity_tensor.stride(1)];
         if intensity > zero {
             let mz = mz_tensor[row * mz_tensor.stride(0) + peak * mz_tensor.stride(1)];
             intensity_max = intensity_max.max(intensity.max(eps).powf(intensity_p));
@@ -175,8 +175,8 @@ pub fn prepare_linear_cosine_row<F: Float>(
 
     let mut product_max = zero;
     for peak in 0..peak_count {
-        let intensity = intensity_tensor
-            [row * intensity_tensor.stride(0) + peak * intensity_tensor.stride(1)];
+        let intensity =
+            intensity_tensor[row * intensity_tensor.stride(0) + peak * intensity_tensor.stride(1)];
         if intensity > zero {
             let mz = mz_tensor[row * mz_tensor.stride(0) + peak * mz_tensor.stride(1)];
             let product = (intensity.max(eps).powf(intensity_p) / intensity_max)
@@ -484,8 +484,7 @@ pub fn modified_linear_cosine_score_rows<F: Float>(
                                     let edge = path[0] as usize;
                                     let left_peak = candidate_left[edge] as usize;
                                     let right_peak = candidate_right[edge] as usize;
-                                    score +=
-                                        left_products[left_peak] * right_products[right_peak];
+                                    score += left_products[left_peak] * right_products[right_peak];
                                     break;
                                 }
                                 let take = dp[index - 2usize] + benefits[index - 1usize];
@@ -493,8 +492,7 @@ pub fn modified_linear_cosine_score_rows<F: Float>(
                                     let edge = path[index - 1usize] as usize;
                                     let left_peak = candidate_left[edge] as usize;
                                     let right_peak = candidate_right[edge] as usize;
-                                    score +=
-                                        left_products[left_peak] * right_products[right_peak];
+                                    score += left_products[left_peak] * right_products[right_peak];
                                     index -= 2usize;
                                 } else {
                                     index -= 1usize;

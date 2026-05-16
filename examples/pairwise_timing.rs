@@ -94,8 +94,12 @@ fn main() {
     println!("=== f32 (spectrum storage = f32, GPU = f32) ===");
     print_header_with_gpu();
 
-    let cosine = LinearCosine::new(f64::from(MZ_POWER), f64::from(INTENSITY_POWER), f64::from(MZ_TOLERANCE))
-        .expect("CPU linear cosine config should be valid");
+    let cosine = LinearCosine::new(
+        f64::from(MZ_POWER),
+        f64::from(INTENSITY_POWER),
+        f64::from(MZ_TOLERANCE),
+    )
+    .expect("CPU linear cosine config should be valid");
     bench_cpu_gpu::<f32, LinearCosineMetric, _>(
         "LinearCosine",
         |left, right| {
@@ -112,8 +116,12 @@ fn main() {
         &device,
     );
 
-    let modified_cosine = ModifiedLinearCosine::new(f64::from(MZ_POWER), f64::from(INTENSITY_POWER), f64::from(MZ_TOLERANCE))
-        .expect("CPU modified linear cosine config should be valid");
+    let modified_cosine = ModifiedLinearCosine::new(
+        f64::from(MZ_POWER),
+        f64::from(INTENSITY_POWER),
+        f64::from(MZ_TOLERANCE),
+    )
+    .expect("CPU modified linear cosine config should be valid");
     bench_cpu_gpu::<f32, ModifiedLinearCosineMetric, _>(
         "ModifiedLinearCosine",
         |left, right| {
@@ -130,8 +138,13 @@ fn main() {
         &device,
     );
 
-    let entropy = LinearEntropy::new(f64::from(MZ_POWER), f64::from(INTENSITY_POWER), f64::from(MZ_TOLERANCE), false)
-        .expect("CPU linear entropy config should be valid");
+    let entropy = LinearEntropy::new(
+        f64::from(MZ_POWER),
+        f64::from(INTENSITY_POWER),
+        f64::from(MZ_TOLERANCE),
+        false,
+    )
+    .expect("CPU linear entropy config should be valid");
     bench_cpu_gpu::<f32, LinearEntropyMetric, _>(
         "LinearEntropy",
         |left, right| {
@@ -148,8 +161,13 @@ fn main() {
         &device,
     );
 
-    let modified_entropy = ModifiedLinearEntropy::new(f64::from(MZ_POWER), f64::from(INTENSITY_POWER), f64::from(MZ_TOLERANCE), false)
-        .expect("CPU modified linear entropy config should be valid");
+    let modified_entropy = ModifiedLinearEntropy::new(
+        f64::from(MZ_POWER),
+        f64::from(INTENSITY_POWER),
+        f64::from(MZ_TOLERANCE),
+        false,
+    )
+    .expect("CPU modified linear entropy config should be valid");
     bench_cpu_gpu::<f32, ModifiedLinearEntropyMetric, _>(
         "ModifiedLinearEntropy",
         |left, right| {
@@ -225,9 +243,7 @@ fn main() {
     println!(
         "  * burn-cuda 0.21 reports `UnsupportedDType {{ dtype: F64 }}` for the CUDA backend, so"
     );
-    println!(
-        "    the f64 pass only shows CPU times. The CPU side computes in f64 in both passes"
-    );
+    println!("    the f64 pass only shows CPU times. The CPU side computes in f64 in both passes");
     println!(
         "    (the CPU scorers upcast peaks via `SpectrumFloat::to_f64`); the difference between"
     );
@@ -294,10 +310,7 @@ fn bench_cpu_gpu<P, M, Score>(
 
     let make_batch = || -> SpectrumBatch<GpuBackend> {
         SpectrumBatch::new(
-            BurnTensor::from_data(
-                TensorData::new(packed.mz.clone(), [n, row_width]),
-                device,
-            ),
+            BurnTensor::from_data(TensorData::new(packed.mz.clone(), [n, row_width]), device),
             BurnTensor::from_data(
                 TensorData::new(packed.intensity.clone(), [n, row_width]),
                 device,

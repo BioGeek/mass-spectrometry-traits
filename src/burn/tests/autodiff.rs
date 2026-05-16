@@ -8,12 +8,10 @@
 
 #![cfg(feature = "burn-autodiff")]
 
-use burn::backend::{Autodiff, Cuda};
 use burn::backend::cuda::CudaDevice;
+use burn::backend::{Autodiff, Cuda};
 
-use crate::burn::{
-    KernelMetric, LinearCosineMetric, cross_kernel, paired_kernel, ranking_kernel,
-};
+use crate::burn::{KernelMetric, LinearCosineMetric, cross_kernel, paired_kernel, ranking_kernel};
 
 use super::fixtures::{
     DEFAULT_TEST_POINT, PAIR_CHUNK_SIZE, TEST_EPSILON, TEST_INTENSITY_POWER, TEST_MAX_PEAKS,
@@ -48,10 +46,11 @@ fn autodiff_paired_matches_raw_backend() {
             &device,
         );
 
-        let scores = paired_kernel::<AutodiffBackend, LinearCosineMetric>(left, right, params, config)
-            .into_data()
-            .to_vec::<f32>()
-            .expect("kernel output should be f32");
+        let scores =
+            paired_kernel::<AutodiffBackend, LinearCosineMetric>(left, right, params, config)
+                .into_data()
+                .to_vec::<f32>()
+                .expect("kernel output should be f32");
 
         for (row, &(left_index, right_index)) in pairs.indices.iter().enumerate() {
             let (_, left) = &spectra[left_index];
@@ -86,10 +85,11 @@ fn autodiff_cross_matches_raw_backend() {
         .with_max_peaks(TEST_MAX_PEAKS)
         .with_epsilon(TEST_EPSILON);
 
-    let scores = cross_kernel::<AutodiffBackend, LinearCosineMetric>(left_batch, right_batch, config)
-        .into_data()
-        .to_vec::<f32>()
-        .expect("cross kernel output should be f32");
+    let scores =
+        cross_kernel::<AutodiffBackend, LinearCosineMetric>(left_batch, right_batch, config)
+            .into_data()
+            .to_vec::<f32>()
+            .expect("cross kernel output should be f32");
 
     assert_eq!(scores.len(), left.len() * right.len());
     for (i, (_, left_spectrum)) in left.iter().enumerate() {

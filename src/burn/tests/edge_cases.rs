@@ -136,11 +136,7 @@ fn cpu_modified_linear_cosine(left: &ReferenceSpectrum, right: &ReferenceSpectru
     .unwrap_or(0.0)
 }
 
-fn cpu_linear_entropy(
-    left: &ReferenceSpectrum,
-    right: &ReferenceSpectrum,
-    weighted: bool,
-) -> f32 {
+fn cpu_linear_entropy(left: &ReferenceSpectrum, right: &ReferenceSpectrum, weighted: bool) -> f32 {
     LinearEntropy::new(
         f64::from(TEST_MZ_POWER),
         f64::from(TEST_INTENSITY_POWER),
@@ -242,7 +238,10 @@ fn edge_case_single_peak_disjoint() {
     let left = build_spectrum(150.0, &[(100.0, 1.0)]);
     let right = build_spectrum(150.0, &[(200.0, 1.0)]);
     let gpu_cosine = paired_score_cosine::<LinearCosineMetric>(&left, &right);
-    assert!(gpu_cosine < 1.0e-4, "disjoint cosine should be ~0, got {gpu_cosine}");
+    assert!(
+        gpu_cosine < 1.0e-4,
+        "disjoint cosine should be ~0, got {gpu_cosine}"
+    );
     assert_all_metrics_match_cpu("single_peak_disjoint", &left, &right);
 }
 

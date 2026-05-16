@@ -13,9 +13,7 @@ use burn_cubecl::CubeBackend;
 use burn_cubecl::cubecl::cuda::CudaRuntime;
 use burn_fusion::Fusion;
 
-use crate::burn::{
-    KernelMetric, LinearCosineMetric, cross_kernel, paired_kernel, ranking_kernel,
-};
+use crate::burn::{KernelMetric, LinearCosineMetric, cross_kernel, paired_kernel, ranking_kernel};
 
 use super::fixtures::{
     DEFAULT_TEST_POINT, PAIR_CHUNK_SIZE, TEST_EPSILON, TEST_INTENSITY_POWER, TEST_MAX_PEAKS,
@@ -49,10 +47,11 @@ fn fusion_paired_matches_cpu_linear_cosine() {
             &device,
         );
 
-        let scores = paired_kernel::<FusionBackend, LinearCosineMetric>(left, right, params, config)
-            .into_data()
-            .to_vec::<f32>()
-            .expect("kernel output should be f32");
+        let scores =
+            paired_kernel::<FusionBackend, LinearCosineMetric>(left, right, params, config)
+                .into_data()
+                .to_vec::<f32>()
+                .expect("kernel output should be f32");
 
         for (row, &(left_index, right_index)) in pairs.indices.iter().enumerate() {
             let (_, left) = &spectra[left_index];
@@ -135,7 +134,15 @@ fn fusion_ranking_runs_and_returns_expected_shapes() {
     assert_eq!(output.top2_gap.dims(), [config.batch_items()]);
 
     // Round-trip the data so the fusion runtime materialises everything.
-    let _ = output.candidate_index.into_data().to_vec::<i32>().expect("i32");
-    let _ = output.best_position.into_data().to_vec::<i32>().expect("i32");
+    let _ = output
+        .candidate_index
+        .into_data()
+        .to_vec::<i32>()
+        .expect("i32");
+    let _ = output
+        .best_position
+        .into_data()
+        .to_vec::<i32>()
+        .expect("i32");
     let _ = output.top2_gap.into_data().to_vec::<f32>().expect("f32");
 }

@@ -42,11 +42,8 @@ fn entropy_ranking_config<M: EntropyMetric>(
     cosine_ranking_config::<M>(point).with_weighted(weighted)
 }
 
-fn run_ranking_test_with<M, F, MakeConfig>(
-    cpu_score: F,
-    tolerance: f32,
-    make_config: MakeConfig,
-) where
+fn run_ranking_test_with<M, F, MakeConfig>(cpu_score: F, tolerance: f32, make_config: MakeConfig)
+where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
     F: Fn(ParameterPoint, &ReferenceSpectrum, &ReferenceSpectrum) -> f32 + Copy,
@@ -94,7 +91,8 @@ fn run_ranking_test_with<M, F, MakeConfig>(
                 M::NAME,
             );
             assert_eq!(
-                best_position[anchor] as usize, expected.best_candidate_position,
+                best_position[anchor] as usize,
+                expected.best_candidate_position,
                 "anchor {anchor} ({}) at {point:?}: best position diverged",
                 M::NAME,
             );
@@ -113,7 +111,8 @@ fn run_ranking_test_with<M, F, MakeConfig>(
             for (left, left_value) in actual_candidates.iter().enumerate() {
                 for right_value in actual_candidates.iter().skip(left + 1) {
                     assert_ne!(
-                        left_value, right_value,
+                        left_value,
+                        right_value,
                         "anchor {anchor} ({}) at {point:?}: duplicate candidate {left_value}",
                         M::NAME,
                     );

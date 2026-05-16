@@ -55,14 +55,42 @@ pub struct ParameterPoint {
 ///   harder. Precursor-shift trigger fires for more reference-spectra pairs.
 pub const CANONICAL_PARAMETER_POINTS: &[ParameterPoint] = &[
     // Exponent sweep at baseline tolerance.
-    ParameterPoint { mz_power: 0.0, intensity_power: 1.0, mz_tolerance: TEST_MZ_TOLERANCE },
-    ParameterPoint { mz_power: 0.0, intensity_power: 0.5, mz_tolerance: TEST_MZ_TOLERANCE },
-    ParameterPoint { mz_power: 0.5, intensity_power: 0.5, mz_tolerance: TEST_MZ_TOLERANCE },
-    ParameterPoint { mz_power: 1.0, intensity_power: 1.0, mz_tolerance: TEST_MZ_TOLERANCE },
-    ParameterPoint { mz_power: TEST_MZ_POWER, intensity_power: TEST_INTENSITY_POWER, mz_tolerance: TEST_MZ_TOLERANCE },
+    ParameterPoint {
+        mz_power: 0.0,
+        intensity_power: 1.0,
+        mz_tolerance: TEST_MZ_TOLERANCE,
+    },
+    ParameterPoint {
+        mz_power: 0.0,
+        intensity_power: 0.5,
+        mz_tolerance: TEST_MZ_TOLERANCE,
+    },
+    ParameterPoint {
+        mz_power: 0.5,
+        intensity_power: 0.5,
+        mz_tolerance: TEST_MZ_TOLERANCE,
+    },
+    ParameterPoint {
+        mz_power: 1.0,
+        intensity_power: 1.0,
+        mz_tolerance: TEST_MZ_TOLERANCE,
+    },
+    ParameterPoint {
+        mz_power: TEST_MZ_POWER,
+        intensity_power: TEST_INTENSITY_POWER,
+        mz_tolerance: TEST_MZ_TOLERANCE,
+    },
     // Tolerance sweep at baseline exponents.
-    ParameterPoint { mz_power: TEST_MZ_POWER, intensity_power: TEST_INTENSITY_POWER, mz_tolerance: 0.001 },
-    ParameterPoint { mz_power: TEST_MZ_POWER, intensity_power: TEST_INTENSITY_POWER, mz_tolerance: 0.1 },
+    ParameterPoint {
+        mz_power: TEST_MZ_POWER,
+        intensity_power: TEST_INTENSITY_POWER,
+        mz_tolerance: 0.001,
+    },
+    ParameterPoint {
+        mz_power: TEST_MZ_POWER,
+        intensity_power: TEST_INTENSITY_POWER,
+        mz_tolerance: 0.1,
+    },
 ];
 
 /// Single-point default for tests that want the baseline scoring without sweeping.
@@ -216,10 +244,7 @@ pub fn spectrum_batch<B: Backend>(rows: &SpectrumRows, device: &B::Device) -> Sp
             TensorData::new(rows.intensity.clone(), [row_count, rows.peak_width]),
             device,
         ),
-        BurnTensor::<B, 1>::from_data(
-            TensorData::new(rows.precursor.clone(), [row_count]),
-            device,
-        ),
+        BurnTensor::<B, 1>::from_data(TensorData::new(rows.precursor.clone(), [row_count]), device),
     )
 }
 

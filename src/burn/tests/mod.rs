@@ -10,11 +10,11 @@
 
 #![cfg(any(feature = "burn-cuda", feature = "burn-cpu"))]
 
-pub(super) mod fixtures;
 #[cfg(feature = "burn-autodiff")]
 mod autodiff;
 mod cross;
 mod edge_cases;
+pub(super) mod fixtures;
 #[cfg(feature = "burn-fusion")]
 mod fusion;
 mod paired;

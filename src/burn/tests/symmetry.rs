@@ -137,10 +137,7 @@ fn symmetric_linear_entropy_unweighted() {
 
 #[test]
 fn symmetric_linear_entropy_weighted() {
-    assert_symmetric::<LinearEntropyMetric>(
-        "LinearEntropy(weighted)",
-        entropy_paired_config(true),
-    );
+    assert_symmetric::<LinearEntropyMetric>("LinearEntropy(weighted)", entropy_paired_config(true));
 }
 
 #[test]

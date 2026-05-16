@@ -22,11 +22,8 @@ type TestDevice = burn::tensor::Device<TestBackend>;
 const CROSS_M: usize = 8;
 const CROSS_N: usize = 12;
 
-fn run_cross_test_with<M, F, MakeConfig>(
-    cpu_score: F,
-    tolerance: f32,
-    make_config: MakeConfig,
-) where
+fn run_cross_test_with<M, F, MakeConfig>(cpu_score: F, tolerance: f32, make_config: MakeConfig)
+where
     M: KernelMetric,
     TestBackend: SpectralKernelBackend<M>,
     F: Fn(ParameterPoint, &ReferenceSpectrum, &ReferenceSpectrum) -> f32 + Copy,
@@ -96,10 +93,7 @@ fn cosine_cross_config<M: KernelMetric>(point: ParameterPoint) -> CrossConfig<M>
         .with_epsilon(TEST_EPSILON)
 }
 
-fn entropy_cross_config<M: EntropyMetric>(
-    point: ParameterPoint,
-    weighted: bool,
-) -> CrossConfig<M> {
+fn entropy_cross_config<M: EntropyMetric>(point: ParameterPoint, weighted: bool) -> CrossConfig<M> {
     cosine_cross_config::<M>(point).with_weighted(weighted)
 }
 
