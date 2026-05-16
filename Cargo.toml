@@ -19,6 +19,7 @@ mem_dbg = ["std", "mem_size", "mem_dbg_crate/std", "geometric-traits/mem_dbg"]
 proptest = ["dep:proptest"]
 rayon = ["std", "dep:rayon"]
 burn = ["std", "dep:burn", "dep:burn-cubecl", "dep:cubecl"]
+burn-autodiff = ["burn", "burn/autodiff"]
 burn-cuda = ["burn", "burn/cuda"]
 burn-wgpu = ["burn", "burn/wgpu"]
 

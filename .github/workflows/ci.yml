@@ -18,7 +18,7 @@ concurrency:
 # compile coverage. Its integration tests are gated separately so they
 # don't run in this build.
 env:
-  CPU_FEATURES: std,indicatif,mem_size,mem_dbg,proptest,rayon,burn
+  CPU_FEATURES: std,indicatif,mem_size,mem_dbg,proptest,rayon,burn,burn-autodiff
 
 jobs:
   prek:

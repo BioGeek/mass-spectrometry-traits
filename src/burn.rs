@@ -63,6 +63,8 @@
 //! crate as a whole remains `no_std` by default (without `burn`).
 
 pub mod api;
+#[cfg(feature = "burn-autodiff")]
+mod autodiff;
 pub(crate) mod cube_backend;
 pub mod kernels;
 pub mod launchers;
