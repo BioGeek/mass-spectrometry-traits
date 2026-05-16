@@ -66,6 +66,8 @@ pub mod api;
 #[cfg(feature = "burn-autodiff")]
 mod autodiff;
 pub(crate) mod cube_backend;
+#[cfg(feature = "burn-fusion")]
+mod fusion;
 pub mod kernels;
 pub mod launchers;
 pub mod metrics;

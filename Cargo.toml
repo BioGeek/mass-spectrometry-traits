@@ -20,6 +20,7 @@ proptest = ["dep:proptest"]
 rayon = ["std", "dep:rayon"]
 burn = ["std", "dep:burn", "dep:burn-cubecl", "dep:cubecl"]
 burn-autodiff = ["burn", "burn/autodiff"]
+burn-fusion = ["burn", "burn/fusion", "dep:burn-fusion", "dep:burn-ir"]
 burn-cuda = ["burn", "burn/cuda"]
 burn-wgpu = ["burn", "burn/wgpu"]
 
@@ -38,6 +39,8 @@ proptest = { version = "1.6", optional = true }
 rayon = { version = "1.11", optional = true }
 burn = { version = "=0.21.0", default-features = false, optional = true }
 burn-cubecl = { version = "=0.21.0", default-features = false, optional = true }
+burn-fusion = { version = "=0.21.0", default-features = false, optional = true }
+burn-ir = { version = "=0.21.0", default-features = false, optional = true }
 cubecl = { version = "=0.10.0", default-features = false, optional = true }
 
 [dev-dependencies]

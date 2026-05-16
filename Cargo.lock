@@ -386,10 +386,13 @@ checksum = "39474be398d30e08681f1f6a8ff446b1e4f1403b5cf7749649a8871fd5945f3a"
 dependencies = [
  "burn-autodiff",
  "burn-core",
+ "burn-cpu",
  "burn-cuda",
  "burn-dispatch",
+ "burn-ir",
  "burn-nn",
  "burn-optim",
+ "burn-rocm",
  "burn-std",
  "burn-vision",
  "burn-wgpu",
@@ -459,6 +462,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "burn-cpu"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "681478c5438ab6c753a55b85f5b42e5bd4c1f69a8564f2afa2f698ac396ba556"
+dependencies = [
+ "burn-backend",
+ "burn-cubecl",
+ "burn-fusion",
+ "cubecl",
+]
+
+[[package]]
 name = "burn-cubecl"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -504,6 +519,7 @@ checksum = "a6c66b49136fc11f59773054358f401fbec7fa0d69615f55ef22c29cf241c9b7"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
+ "burn-fusion",
  "cubecl",
 ]
 
@@ -585,6 +601,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "burn-rocm"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66af82fdaaf2ad0fa4b0dae90119aa94f333105d76d520e0eb48917717c06fde"
+dependencies = [
+ "burn-backend",
+ "burn-cubecl",
+ "burn-fusion",
+ "cubecl",
+]
+
+[[package]]
 name = "burn-std"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -625,6 +653,7 @@ dependencies = [
  "aligned-vec",
  "bon",
  "burn-cubecl",
+ "burn-fusion",
  "burn-ir",
  "burn-tensor",
  "bytemuck",
@@ -647,6 +676,7 @@ checksum = "6eb009254af15922cb37814f3b3b61043046193ba2fde97c3879a25fbd51a92e"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
+ "burn-fusion",
  "cubecl",
 ]
 
@@ -2857,6 +2887,8 @@ dependencies = [
  "arbitrary",
  "burn",
  "burn-cubecl",
+ "burn-fusion",
+ "burn-ir",
  "criterion",
  "csv",
  "cubecl",
