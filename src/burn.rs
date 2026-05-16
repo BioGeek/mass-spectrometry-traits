@@ -73,6 +73,9 @@ pub mod launchers;
 pub mod metrics;
 mod scorer_trait;
 
+#[cfg(test)]
+mod tests;
+
 pub use api::{
     AllMetricsBackend, CrossConfig, MAX_PEAKS_LIMIT, PairedConfig, PairwiseParams, RankingConfig,
     RankingOutput, RankingWindow, ScoringParams, SpectralKernelBackend, SpectrumBatch,
