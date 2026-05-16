@@ -18,7 +18,10 @@ use burn::tensor::TensorPrimitive;
 use burn::tensor::backend::Backend;
 use burn::tensor::ops::{FloatTensor, IntTensor};
 
-use crate::burn::metrics::KernelMetric;
+use crate::burn::metrics::{
+    KernelMetric, LinearCosineMetric, LinearEntropyMetric, ModifiedLinearCosineMetric,
+    ModifiedLinearEntropyMetric,
+};
 
 pub mod bundles;
 pub mod configs;
@@ -70,6 +73,54 @@ pub trait SpectralKernelBackend<M: KernelMetric>: Backend {
         teacher: SpectrumPrimitive<Self>,
         config: RankingConfig<M>,
     ) -> (IntTensor<Self>, IntTensor<Self>, FloatTensor<Self>);
+}
+
+/// Convenience super-trait satisfied by any backend that implements
+/// [`SpectralKernelBackend`] for every built-in metric marker
+/// ([`LinearCosineMetric`], [`ModifiedLinearCosineMetric`],
+/// [`LinearEntropyMetric`], [`ModifiedLinearEntropyMetric`]).
+///
+/// Use this when a function or struct needs to be generic in the backend but
+/// wants access to *every* metric at runtime, typically because the metric
+/// choice comes from configuration or a runtime enum and the dispatch happens
+/// inside the function body. The alternative is repeating four
+/// `SpectralKernelBackend<M>` bounds at every use site.
+///
+/// ```ignore
+/// fn run_teacher<B: AllMetricsBackend>(teacher: SpectrumBatch<B>, metric: MyEnum) {
+///     match metric {
+///         MyEnum::Cosine => ranking_kernel(teacher, LinearCosineMetric::ranking_config()),
+///         MyEnum::Entropy => ranking_kernel(teacher, LinearEntropyMetric::ranking_config()),
+///         /* ... */
+///     };
+/// }
+/// ```
+///
+/// This trait is auto-implemented for every backend that satisfies the four
+/// underlying bounds via a blanket impl, so the `CubeBackend<R, F, I, BT>`,
+/// `Autodiff<B, C>`, and `Fusion<B>` impls produced by the rest of this
+/// module automatically gain `AllMetricsBackend` with no extra wiring.
+///
+/// If you only need one or two metrics, prefer naming them directly
+/// (`B: SpectralKernelBackend<LinearCosineMetric>`). The narrower bound
+/// produces clearer compiler errors and doesn't require the backend to
+/// implement metrics you don't use.
+pub trait AllMetricsBackend:
+    Backend
+    + SpectralKernelBackend<LinearCosineMetric>
+    + SpectralKernelBackend<ModifiedLinearCosineMetric>
+    + SpectralKernelBackend<LinearEntropyMetric>
+    + SpectralKernelBackend<ModifiedLinearEntropyMetric>
+{
+}
+
+impl<B> AllMetricsBackend for B where
+    B: Backend
+        + SpectralKernelBackend<LinearCosineMetric>
+        + SpectralKernelBackend<ModifiedLinearCosineMetric>
+        + SpectralKernelBackend<LinearEntropyMetric>
+        + SpectralKernelBackend<ModifiedLinearEntropyMetric>
+{
 }
 
 /// Public wrapper around [`SpectralKernelBackend::paired_score`].

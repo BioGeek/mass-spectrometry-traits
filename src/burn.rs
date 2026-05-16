@@ -70,12 +70,12 @@ pub mod metrics;
 mod scorer_trait;
 
 pub use api::{
-    CrossConfig, MAX_PEAKS_LIMIT, PairedConfig, PairwiseParams, RankingConfig, RankingOutput,
-    RankingWindow, ScoringParams, SpectralKernelBackend, SpectrumBatch, cross_kernel,
-    paired_kernel, ranking_kernel,
+    AllMetricsBackend, CrossConfig, MAX_PEAKS_LIMIT, PairedConfig, PairwiseParams, RankingConfig,
+    RankingOutput, RankingWindow, ScoringParams, SpectralKernelBackend, SpectrumBatch,
+    cross_kernel, paired_kernel, ranking_kernel,
 };
 pub use metrics::{
     EntropyMetric, KernelMetric, LinearCosineMetric, LinearEntropyMetric,
-    ModifiedLinearCosineMetric,
+    ModifiedLinearCosineMetric, ModifiedLinearEntropyMetric,
 };
 pub use scorer_trait::SpectralPairScorer;

@@ -118,3 +118,23 @@ impl KernelMetric for LinearEntropyMetric {
 }
 
 impl EntropyMetric for LinearEntropyMetric {}
+
+/// Marker for the modified (precursor-shifted) linear entropy similarity metric.
+///
+/// Combines the precursor-shift candidate sweep + DP-on-paths assignment of
+/// [`ModifiedLinearCosineMetric`] with the entropy pair scoring of
+/// [`LinearEntropyMetric`]. The `weighted` toggle controls Shannon-entropy
+/// re-weighting in the prepass.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ModifiedLinearEntropyMetric;
+
+impl KernelMetric for ModifiedLinearEntropyMetric {
+    const NAME: &'static str = "modified_linear_entropy";
+    const USES_PRECURSOR: bool = true;
+    const IS_ENTROPY: bool = true;
+    const PAIRED_FUSION_NAME: &'static str = "spectral_paired_forward__modified_linear_entropy";
+    const CROSS_FUSION_NAME: &'static str = "spectral_cross_forward__modified_linear_entropy";
+    const RANKING_FUSION_NAME: &'static str = "spectral_ranking_forward__modified_linear_entropy";
+}
+
+impl EntropyMetric for ModifiedLinearEntropyMetric {}
