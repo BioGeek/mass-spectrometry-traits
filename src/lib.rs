@@ -12,6 +12,9 @@ pub mod fuzzing;
 pub mod structs;
 pub mod traits;
 
+#[cfg(feature = "burn")]
+pub mod burn;
+
 /// Prelude module for the mass_spectrometry crate.
 pub mod prelude {
     pub use geometric_traits::prelude::ScalarSimilarity;
