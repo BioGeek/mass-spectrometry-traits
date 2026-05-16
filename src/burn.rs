@@ -74,5 +74,8 @@ pub use api::{
     RankingWindow, ScoringParams, SpectralKernelBackend, SpectrumBatch, cross_kernel,
     paired_kernel, ranking_kernel,
 };
-pub use metrics::{EntropyMetric, KernelMetric, LinearCosineMetric, ModifiedLinearCosineMetric};
+pub use metrics::{
+    EntropyMetric, KernelMetric, LinearCosineMetric, LinearEntropyMetric,
+    ModifiedLinearCosineMetric,
+};
 pub use scorer_trait::SpectralPairScorer;

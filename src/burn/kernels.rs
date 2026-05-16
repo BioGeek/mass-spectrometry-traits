@@ -6,5 +6,6 @@
 //! per-pair scoring routine is monomorphized per metric.
 
 pub mod cosine;
+pub mod entropy;
 pub mod modified_dp;
 pub mod peak_ops;

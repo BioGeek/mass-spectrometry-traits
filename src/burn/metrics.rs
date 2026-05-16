@@ -96,7 +96,25 @@ impl KernelMetric for ModifiedLinearCosineMetric {
 
 /// Marker trait satisfied only by entropy metrics. Used as a typestate
 /// bound so that the entropy-only `with_weighted` builder method on the
-/// config structs is inaccessible to cosine metrics at compile time. No
-/// implementers exist in this commit; they arrive when each entropy
-/// metric is added.
+/// config structs is inaccessible to cosine metrics at compile time.
 pub trait EntropyMetric: KernelMetric {}
+
+/// Marker for the linear entropy similarity metric (Li et al.).
+///
+/// The `weighted` toggle on the kernel config selects between unweighted
+/// entropy and Shannon-entropy-reweighted entropy (the standard MS-entropy
+/// variant). Both share this marker since the toggle is a runtime parameter,
+/// not a metric class.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LinearEntropyMetric;
+
+impl KernelMetric for LinearEntropyMetric {
+    const NAME: &'static str = "linear_entropy";
+    const USES_PRECURSOR: bool = false;
+    const IS_ENTROPY: bool = true;
+    const PAIRED_FUSION_NAME: &'static str = "spectral_paired_forward__linear_entropy";
+    const CROSS_FUSION_NAME: &'static str = "spectral_cross_forward__linear_entropy";
+    const RANKING_FUSION_NAME: &'static str = "spectral_ranking_forward__linear_entropy";
+}
+
+impl EntropyMetric for LinearEntropyMetric {}
