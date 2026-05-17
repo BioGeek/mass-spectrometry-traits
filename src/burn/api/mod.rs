@@ -126,8 +126,61 @@ impl<B> AllMetricsBackend for B where
 /// Public wrapper around [`SpectralKernelBackend::paired_score`].
 ///
 /// `left` and `right` are `[batch, peak_width]` plus a `[batch]` precursor
-/// each. `params` carries the three `[batch]` per-row scoring tensors.
-/// Returns `[batch]`.
+/// each. `params` carries the three `[batch]` per-row scoring tensors so
+/// each pair can score under its own `(mz_power, intensity_power,
+/// mz_tolerance)` triple. Returns `[batch]`.
+///
+/// ```
+/// // Prefer CUDA when both runtimes are enabled; fall back to the MLIR CPU
+/// // runtime (`burn-cpu`) so the same example runs under the GPU-free CI
+/// // feature set. When neither runtime is enabled, the body is skipped and
+/// // the doctest is a no-op (still compiles, still passes).
+/// #[cfg(any(feature = "burn-cuda", feature = "burn-cpu"))]
+/// fn run() {
+///     use burn::tensor::{Tensor, TensorData};
+///     use mass_spectrometry::burn::{
+///         KernelMetric, LinearCosineMetric, PairwiseParams, SpectrumBatch,
+///         paired_kernel,
+///     };
+///
+///     #[cfg(feature = "burn-cuda")]
+///     type B = burn::backend::Cuda<f32, i32>;
+///     #[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+///     type B = burn::backend::Cpu<f32, i32>;
+///     type Dev = burn::tensor::Device<B>;
+///
+///     let device = Dev::default();
+///
+///     let left = SpectrumBatch::<B>::new(
+///         Tensor::from_data(TensorData::new(vec![100.0_f32, 200.0], [1, 2]), &device),
+///         Tensor::from_data(TensorData::new(vec![10.0_f32, 20.0], [1, 2]), &device),
+///         Tensor::from_data(TensorData::new(vec![500.0_f32], [1]), &device),
+///     );
+///     let right = SpectrumBatch::<B>::new(
+///         Tensor::from_data(TensorData::new(vec![100.05_f32, 200.05], [1, 2]), &device),
+///         Tensor::from_data(TensorData::new(vec![10.0_f32, 20.0], [1, 2]), &device),
+///         Tensor::from_data(TensorData::new(vec![500.0_f32], [1]), &device),
+///     );
+///     let params = PairwiseParams::<B>::new(
+///         Tensor::from_data(TensorData::new(vec![0.0_f32], [1]), &device),
+///         Tensor::from_data(TensorData::new(vec![1.0_f32], [1]), &device),
+///         Tensor::from_data(TensorData::new(vec![0.1_f32], [1]), &device),
+///     );
+///     let config = LinearCosineMetric::paired_config()
+///         .with_max_peaks(128)
+///         .with_epsilon(1.0e-8);
+///
+///     let scores = paired_kernel::<B, LinearCosineMetric>(left, right, params, config);
+///     let score = scores.into_data().to_vec::<f32>().unwrap()[0];
+///     assert!(score > 0.99);
+/// }
+/// #[cfg(not(any(feature = "burn-cuda", feature = "burn-cpu")))]
+/// fn run() {}
+///
+/// fn main() {
+///     run();
+/// }
+/// ```
 pub fn paired_kernel<B, M>(
     left: SpectrumBatch<B>,
     right: SpectrumBatch<B>,
@@ -150,6 +203,56 @@ where
 /// Public wrapper around [`SpectralKernelBackend::cross_score`].
 ///
 /// `left` has shape `[M, P]`, `right` has shape `[N, P]`. Returns `[M, N]`.
+/// All MxN pairs share the same scalar scoring parameters from `config`
+/// (see [`CrossConfig`] for the broadcasting rationale).
+///
+/// ```
+/// #[cfg(any(feature = "burn-cuda", feature = "burn-cpu"))]
+/// fn run() {
+///     use burn::tensor::{Tensor, TensorData};
+///     use mass_spectrometry::burn::{
+///         KernelMetric, LinearCosineMetric, SpectrumBatch, cross_kernel,
+///     };
+///
+///     #[cfg(feature = "burn-cuda")]
+///     type B = burn::backend::Cuda<f32, i32>;
+///     #[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+///     type B = burn::backend::Cpu<f32, i32>;
+///     type Dev = burn::tensor::Device<B>;
+///
+///     let device = Dev::default();
+///
+///     // [2 spectra x 2 peaks] on each side -> [2 x 2] score matrix.
+///     let left = SpectrumBatch::<B>::new(
+///         Tensor::from_data(
+///             TensorData::new(vec![100.0_f32, 200.0, 110.0, 210.0], [2, 2]),
+///             &device,
+///         ),
+///         Tensor::from_data(
+///             TensorData::new(vec![10.0_f32, 20.0, 12.0, 22.0], [2, 2]),
+///             &device,
+///         ),
+///         Tensor::from_data(TensorData::new(vec![500.0_f32, 510.0], [2]), &device),
+///     );
+///     let right = left.clone(); // Cheap: Burn tensors are refcounted handles.
+///
+///     let config = LinearCosineMetric::cross_config()
+///         .with_mz_power(0.0)
+///         .with_intensity_power(1.0)
+///         .with_mz_tolerance(0.1)
+///         .with_max_peaks(128)
+///         .with_epsilon(1.0e-8);
+///
+///     let scores = cross_kernel::<B, LinearCosineMetric>(left, right, config);
+///     assert_eq!(scores.dims(), [2, 2]);
+/// }
+/// #[cfg(not(any(feature = "burn-cuda", feature = "burn-cpu")))]
+/// fn run() {}
+///
+/// fn main() {
+///     run();
+/// }
+/// ```
 pub fn cross_kernel<B, M>(
     left: SpectrumBatch<B>,
     right: SpectrumBatch<B>,
@@ -186,6 +289,69 @@ pub struct RankingOutput<B: Backend> {
 /// `teacher` carries the `[N, P]` peak grids and `[N]` precursor masses for
 /// the full cache. See [`RankingOutput`] for the shape of the returned
 /// tensors.
+///
+/// ```
+/// #[cfg(any(feature = "burn-cuda", feature = "burn-cpu"))]
+/// fn run() {
+///     use burn::tensor::{Tensor, TensorData};
+///     use mass_spectrometry::burn::{
+///         KernelMetric, LinearCosineMetric, SpectrumBatch, ranking_kernel,
+///     };
+///
+///     #[cfg(feature = "burn-cuda")]
+///     type B = burn::backend::Cuda<f32, i32>;
+///     #[cfg(all(feature = "burn-cpu", not(feature = "burn-cuda")))]
+///     type B = burn::backend::Cpu<f32, i32>;
+///     type Dev = burn::tensor::Device<B>;
+///
+///     let device = Dev::default();
+///
+///     // 4-spectrum teacher cache: each row has 2 peaks plus a precursor mass.
+///     let teacher = SpectrumBatch::<B>::new(
+///         Tensor::from_data(
+///             TensorData::new(
+///                 vec![100.0_f32, 200.0, 105.0, 205.0, 300.0, 400.0, 310.0, 410.0],
+///                 [4, 2],
+///             ),
+///             &device,
+///         ),
+///         Tensor::from_data(
+///             TensorData::new(
+///                 vec![10.0_f32, 20.0, 11.0, 21.0, 5.0, 15.0, 6.0, 16.0],
+///                 [4, 2],
+///             ),
+///             &device,
+///         ),
+///         Tensor::from_data(
+///             TensorData::new(vec![500.0_f32, 510.0, 600.0, 610.0], [4]),
+///             &device,
+///         ),
+///     );
+///
+///     // Score every row in the cache, sampling 2 non-self partners per anchor.
+///     let config = LinearCosineMetric::ranking_config()
+///         .with_batch_start(0)
+///         .with_batch_items(4)
+///         .with_candidates_per_anchor(2)
+///         .with_mz_power(0.0)
+///         .with_intensity_power(1.0)
+///         .with_mz_tolerance(0.1)
+///         .with_max_peaks(128)
+///         .with_seed(42)
+///         .with_epsilon(1.0e-8);
+///
+///     let output = ranking_kernel::<B, LinearCosineMetric>(teacher, config);
+///     assert_eq!(output.candidate_index.dims(), [4, 2]);
+///     assert_eq!(output.best_position.dims(), [4]);
+///     assert_eq!(output.top2_gap.dims(), [4]);
+/// }
+/// #[cfg(not(any(feature = "burn-cuda", feature = "burn-cpu")))]
+/// fn run() {}
+///
+/// fn main() {
+///     run();
+/// }
+/// ```
 pub fn ranking_kernel<B, M>(teacher: SpectrumBatch<B>, config: RankingConfig<M>) -> RankingOutput<B>
 where
     B: SpectralKernelBackend<M>,
