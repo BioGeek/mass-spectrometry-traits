@@ -9,6 +9,7 @@ readme = "README.md"
 
 [workspace]
 members = ["fuzz"]
+exclude = ["python"]
 
 [features]
 default = []
@@ -18,6 +19,12 @@ mem_size = ["dep:mem_dbg_crate", "mem_dbg_crate/derive", "mem_dbg_crate/half", "
 mem_dbg = ["std", "mem_size", "mem_dbg_crate/std", "geometric-traits/mem_dbg"]
 proptest = ["dep:proptest"]
 rayon = ["std", "dep:rayon"]
+burn = ["std", "dep:burn", "dep:burn-cubecl", "dep:cubecl"]
+burn-autodiff = ["burn", "burn/autodiff"]
+burn-fusion = ["burn", "burn/fusion", "dep:burn-fusion", "dep:burn-ir"]
+burn-cuda = ["burn", "burn/cuda"]
+burn-cpu = ["burn", "burn/cpu"]
+burn-wgpu = ["burn", "burn/wgpu"]
 
 [dependencies]
 geometric-traits = { git = "https://github.com/earth-metabolome-initiative/geometric-traits", default-features = false, features = ["alloc"] }
@@ -32,6 +39,11 @@ mem_dbg_crate = { package = "mem_dbg", version = "0.4.1", default-features = fal
 indicatif = { version = "0.18", optional = true }
 proptest = { version = "1.6", optional = true }
 rayon = { version = "1.11", optional = true }
+burn = { version = "=0.21.0", default-features = false, optional = true }
+burn-cubecl = { version = "=0.21.0", default-features = false, optional = true }
+burn-fusion = { version = "=0.21.0", default-features = false, optional = true }
+burn-ir = { version = "=0.21.0", default-features = false, optional = true }
+cubecl = { version = "=0.10.0", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -78,3 +90,7 @@ harness = false
 [[bench]]
 name = "splash"
 harness = false
+
+[[example]]
+name = "pairwise_timing"
+required-features = ["burn", "burn-cuda", "rayon"]

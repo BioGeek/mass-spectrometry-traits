@@ -10,7 +10,10 @@ and SPLASH fingerprints. `GenericSpectrum<P>` stores sorted `(m/z, intensity)` p
 or `half::f16` precision. The crate includes cosine and entropy similarities,
 fast search indices including cutoff-specialized cosine indices and exact top-k
 queries for direct graph construction, SPLASH generation, and built-in reference
-spectra for examples and regression tests.
+spectra for examples and regression tests. Optional GPU kernels
+([Burn](https://burn.dev/) + [CubeCL](https://github.com/tracel-ai/cubecl))
+cover the four similarity metrics on CUDA and on a CPU-side MLIR runtime,
+with autodiff and fusion wrappers for training-loop integration.
 
 ## Examples
 
