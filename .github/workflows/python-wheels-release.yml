@@ -1,0 +1,165 @@
+name: Python Wheels Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update, for example v0.1.0"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: python-wheels-release-${{ github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build-wheels:
+    name: build wheels (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            target: x86_64
+          - os: macos-15-intel
+            platform: macos-x86_64
+            target: x86_64-apple-darwin
+          - os: macos-14
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            platform: windows-x64
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist
+          manylinux: auto
+          target: ${{ matrix.target }}
+          sccache: true
+
+      - name: Smoke test wheel
+        shell: bash
+        run: |
+          python -m pip install --no-index --find-links dist --force-reinstall mass_spectrometry
+          python - <<'PY'
+          import mass_spectrometry
+
+          assert (
+              mass_spectrometry.splash([(100.0, 10.0), (200.0, 20.0)])
+              == "splash10-0udi-0490000000-4425acda10ed7d4709bd"
+          )
+          PY
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  release:
+    name: upload wheels to GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-wheels
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - name: Resolve release metadata
+        id: release
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=${{ inputs.prerelease }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Python wheels for `mass_spectrometry`.
+
+          Install a wheel on a machine without Rust/Cargo:
+
+          ```bash
+          python -m pip install mass_spectrometry-*.whl
+          ```
+
+          Example usage:
+
+          ```python
+          import mass_spectrometry
+
+          peaks = [(100.0, 10.0), (200.0, 20.0)]
+          splash = mass_spectrometry.splash(peaks)
+
+          print(splash)
+          # splash10-0udi-0490000000-4425acda10ed7d4709bd
+          ```
+          NOTES
+
+      - name: Create or update GitHub Release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        shell: bash
+        run: |
+          ls -lh dist
+
+          prerelease_flag=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            prerelease_flag=(--prerelease)
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file release-notes.md "${prerelease_flag[@]}"
+            gh release upload "$RELEASE_TAG" dist/*.whl --clobber
+          else
+            target_flag=()
+            if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+              target_flag=(--target "$GITHUB_SHA")
+            fi
+
+            gh release create "$RELEASE_TAG" dist/*.whl \
+              "${target_flag[@]}" \
+              --title "$RELEASE_TAG" \
+              --notes-file release-notes.md \
+              "${prerelease_flag[@]}"
+          fi
